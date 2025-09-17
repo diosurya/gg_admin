@@ -1,0 +1,1168 @@
+@extends('layouts.app')
+
+@section('title', 'Add Product')
+
+@php
+    $pageTitle = 'Add Product';
+    $breadcrumbs = [
+        ['title' => 'E-commerce'],
+        ['title' => 'Product List', 'url' => route('admin.products.index')],
+        ['title' => 'Add Product']
+    ];
+@endphp
+
+@push('page-actions')
+    <a href="{{ route('admin.products.index') }}" class="btn btn-secondary">
+        <i class="fa fa-arrow-left"></i> Back to List
+    </a>
+@endpush
+
+@push('styles')
+<link href="{{ asset('css/plugins/summernote/summernote-bs4.css') }}" rel="stylesheet">
+<link href="{{ asset('css/plugins/dropzone/dropzone.css') }}" rel="stylesheet">
+<link href="{{ asset('css/plugins/select2/select2.min.css') }}" rel="stylesheet">
+<link href="{{ asset('css/plugins/jsTree/style.min.css') }}" rel="stylesheet">
+<link href="{{ asset('css/plugins/switchery/switchery.css') }}" rel="stylesheet">
+<link href="{{ asset('css/plugins/toastr/toastr.min.css') }}" rel="stylesheet">
+<link href="{{ asset('css/plugins/sweetalert/sweetalert.css') }}" rel="stylesheet">
+<style>
+.image-preview {
+    max-width: 60px;
+    max-height: 60px;
+    border-radius: 4px;
+}
+.variant-row {
+    border: 1px solid #e5e6e7;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+}
+.discount-row {
+    border: 1px solid #e5e6e7;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+.form-help {
+    font-size: 11px;
+    color: #676a6c;
+    margin-top: 5px;
+}
+.required-field:after {
+    content: " *";
+    color: red;
+}
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    z-index: 9999;
+    display: none;
+}
+.loading-spinner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    text-align: center;
+}
+</style>
+@endpush
+
+@section('content')
+<div class="wrapper wrapper-content animated fadeInRight ecommerce">
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <div class="sk-spinner sk-spinner-rotating-plane"></div>
+            <h3>Saving Product...</h3>
+            <p>Please wait while we process your data</p>
+        </div>
+    </div>
+
+    <form id="productForm" enctype="multipart/form-data">
+        @csrf
+        
+        <div class="row">
+            <div class="col-md-12">
+                <div class="tabs-container">
+                    <ul class="nav nav-tabs">
+                        <li><a class="nav-link active" data-toggle="tab" href="#tab-basic"> Basic Info</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-details"> Details</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-variants"> Variants</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-pricing"> Pricing & Discounts</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-images"> Images</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-categories"> Categories</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-seo"> SEO & Meta</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-shipping"> Shipping & Tax</a></li>
+                    </ul>
+                    
+                    <div class="tab-content">
+                        {{-- Basic Info Tab --}}
+                        <div id="tab-basic" class="tab-pane active">
+                            <div class="panel-body">
+                                <fieldset>
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label required-field">Name</label>
+                                        <div class="col-sm-10">
+                                            <input type="text" name="name" class="form-control" 
+                                                   placeholder="Product name" value="{{ old('name') }}" required>
+                                            <div class="invalid-feedback"></div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label required-field">SKU</label>
+                                        <div class="col-sm-10">
+                                            <input type="text" name="sku" class="form-control" 
+                                                   placeholder="Product SKU" value="{{ old('sku') }}" required>
+                                            <div class="form-help">Unique product identifier</div>
+                                            <div class="invalid-feedback"></div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Short Description</label>
+                                        <div class="col-sm-10">
+                                            <textarea name="short_description" class="form-control" rows="3" 
+                                                      placeholder="Brief product description">{{ old('short_description') }}</textarea>
+                                            <div class="form-help">Brief description for listings (max 255 characters)</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Description</label>
+                                        <div class="col-sm-10">
+                                            <div class="summernote" name="description">
+                                                {{ old('description', 'Enter detailed product description here...') }}
+                                            </div>
+                                        </div>
+                                        <textarea name="description" id="description" style="display: none;">{{ old('description') }}</textarea>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Brand</label>
+                                        <div class="col-sm-10">
+                                            <select name="brand_id" class="form-control select2">
+                                                <option value="">Select Brand</option>
+                                                @foreach($brands as $brand)
+                                                    <option value="{{ $brand->id }}" {{ old('brand_id') == $brand->id ? 'selected' : '' }}>
+                                                        {{ $brand->name }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label required-field">Status</label>
+                                        <div class="col-sm-10">
+                                            <select name="status" class="form-control" required>
+                                                <option value="draft" {{ old('status') == 'draft' ? 'selected' : '' }}>Draft</option>
+                                                <option value="published" {{ old('status') == 'published' ? 'selected' : '' }}>Published</option>
+                                                <option value="archived" {{ old('status') == 'archived' ? 'selected' : '' }}>Archived</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </fieldset>
+                            </div>
+                        </div>
+
+                        {{-- Details Tab --}}
+                        <div id="tab-details" class="tab-pane">
+                            <div class="panel-body">
+                                <fieldset>
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Type</label>
+                                        <div class="col-sm-10">
+                                            <input type="text" name="type" class="form-control" 
+                                                   placeholder="Product type (e.g., Electronics, Clothing)" value="{{ old('type') }}">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Barcode</label>
+                                        <div class="col-sm-10">
+                                            <input type="text" name="barcode" class="form-control" 
+                                                   placeholder="Product barcode" value="{{ old('barcode') }}">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Model</label>
+                                        <div class="col-sm-10">
+                                            <input type="text" name="model" class="form-control" 
+                                                   placeholder="Product model" value="{{ old('model') }}">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Minimum Quantity</label>
+                                        <div class="col-sm-10">
+                                            <input type="number" name="minimum_quantity" class="form-control" 
+                                                   placeholder="1" value="{{ old('minimum_quantity', 1) }}" min="1">
+                                            <div class="form-help">Minimum quantity required for purchase</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Sort Order</label>
+                                        <div class="col-sm-10">
+                                            <input type="number" name="sort_order" class="form-control" 
+                                                   placeholder="0" value="{{ old('sort_order', 0) }}">
+                                            <div class="form-help">Used for ordering products in listings</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Track Stock</label>
+                                        <div class="col-sm-10">
+                                            <input type="checkbox" name="track_stock" class="js-switch" value="1" 
+                                                   {{ old('track_stock') ? 'checked' : '' }}>
+                                            <div class="form-help">Enable stock tracking for this product</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Featured</label>
+                                        <div class="col-sm-10">
+                                            <input type="checkbox" name="is_featured" class="js-switch" value="1" 
+                                                   {{ old('is_featured') ? 'checked' : '' }}>
+                                            <div class="form-help">Show product in featured section</div>
+                                        </div>
+                                    </div>
+                                </fieldset>
+                            </div>
+                        </div>
+
+                        {{-- Variants Tab --}}
+                        <div id="tab-variants" class="tab-pane">
+                            <div class="panel-body">
+                                <div class="row mb-3">
+                                    <div class="col-sm-12">
+                                        <button type="button" class="btn btn-primary" id="addVariant">
+                                            <i class="fa fa-plus"></i> Add Variant
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div id="variantContainer">
+                                    <!-- Variants will be added here dynamically -->
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Pricing & Discounts Tab --}}
+                        <div id="tab-pricing" class="tab-pane">
+                            <div class="panel-body">
+                                <fieldset>
+                                    <h4>Pricing</h4>
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label required-field">Regular Price</label>
+                                        <div class="col-sm-4">
+                                            <div class="input-group">
+                                                <span class="input-group-prepend">
+                                                    <span class="input-group-text">Rp</span>
+                                                </span>
+                                                <input type="number" name="price" class="form-control" 
+                                                       placeholder="0.00" step="0.01" value="{{ old('price') }}" required>
+                                            </div>
+                                        </div>
+                                        
+                                        <label class="col-sm-2 col-form-label">Sale Price</label>
+                                        <div class="col-sm-4">
+                                            <div class="input-group">
+                                                <span class="input-group-prepend">
+                                                    <span class="input-group-text">Rp</span>
+                                                </span>
+                                                <input type="number" name="sale_price" class="form-control" 
+                                                       placeholder="0.00" step="0.01" value="{{ old('sale_price') }}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Cost Price</label>
+                                        <div class="col-sm-4">
+                                            <div class="input-group">
+                                                <span class="input-group-prepend">
+                                                    <span class="input-group-text">Rp</span>
+                                                </span>
+                                                <input type="number" name="cost_price" class="form-control" 
+                                                       placeholder="0.00" step="0.01" value="{{ old('cost_price') }}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </fieldset>
+                                
+                                <hr>
+                                
+                                <fieldset>
+                                    <h4>Bulk Discounts</h4>
+                                    <div class="row mb-3">
+                                        <div class="col-sm-12">
+                                            <button type="button" class="btn btn-primary" id="addDiscount">
+                                                <i class="fa fa-plus"></i> Add Discount Rule
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="discountContainer">
+                                        <!-- Discounts will be added here dynamically -->
+                                    </div>
+                                </fieldset>
+                            </div>
+                        </div>
+
+                        {{-- Images Tab --}}
+                        <div id="tab-images" class="tab-pane">
+                            <div class="panel-body">
+                                <div class="form-group">
+                                    <label>Product Images</label>
+                                    <div class="dropzone" id="productDropzone">
+                                        <div class="dz-message">
+                                            <h3>Drop files here or click to upload.</h3>
+                                            <em>(Multiple files can be uploaded)</em>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="table-responsive mt-3">
+                                    <table class="table table-bordered" id="imageTable" style="display: none;">
+                                        <thead>
+                                        <tr>
+                                            <th>Image Preview</th>
+                                            <th>Image Name</th>
+                                            <th>Alt Text</th>
+                                            <th>Sort Order</th>
+                                            <th>Is Primary</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody id="imageTableBody">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Categories Tab --}}
+                        <div id="tab-categories" class="tab-pane">
+                            <div class="panel-body">
+                                <div class="form-group">
+                                    <label>Select Categories</label>
+                                    <div class="form-help mb-2">Select multiple categories for this product</div>
+                                    <div class="category-tree" id="categoryTree">
+                                        <!-- Category tree will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- SEO & Meta Tab --}}
+                        <div id="tab-seo" class="tab-pane">
+                            <div class="panel-body">
+                                <div class="seo-section">
+                                    <h4>SEO Settings</h4>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Meta Title</label>
+                                        <div class="col-sm-10">
+                                            <input type="text" name="meta_title" class="form-control" 
+                                                   placeholder="SEO meta title" value="{{ old('meta_title') }}" maxlength="60">
+                                            <div class="form-help">Recommended length: 50-60 characters</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Meta Description</label>
+                                        <div class="col-sm-10">
+                                            <textarea name="meta_description" class="form-control" rows="3" 
+                                                      placeholder="SEO meta description" maxlength="160">{{ old('meta_description') }}</textarea>
+                                            <div class="form-help">Recommended length: 150-160 characters</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Meta Keywords</label>
+                                        <div class="col-sm-10">
+                                            <input type="text" name="meta_keywords" class="form-control" 
+                                                   placeholder="keyword1, keyword2, keyword3" value="{{ old('meta_keywords') }}">
+                                            <div class="form-help">Separate keywords with commas</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">URL Slug</label>
+                                        <div class="col-sm-10">
+                                            <input type="text" name="slug" class="form-control" 
+                                                   placeholder="product-url-slug" value="{{ old('slug') }}">
+                                            <div class="form-help">Auto-generated from name if left empty</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Shipping & Tax Tab --}}
+                        <div id="tab-shipping" class="tab-pane">
+                            <div class="panel-body">
+                                <fieldset>
+                                    <h4>Shipping Information</h4>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Weight (kg)</label>
+                                        <div class="col-sm-4">
+                                            <input type="number" name="weight" class="form-control" 
+                                                   placeholder="0.00" step="0.01" value="{{ old('weight') }}">
+                                        </div>
+                                        
+                                        <label class="col-sm-2 col-form-label">Length (cm)</label>
+                                        <div class="col-sm-4">
+                                            <input type="number" name="length" class="form-control" 
+                                                   placeholder="0.00" step="0.01" value="{{ old('length') }}">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Width (cm)</label>
+                                        <div class="col-sm-4">
+                                            <input type="number" name="width" class="form-control" 
+                                                   placeholder="0.00" step="0.01" value="{{ old('width') }}">
+                                        </div>
+                                        
+                                        <label class="col-sm-2 col-form-label">Height (cm)</label>
+                                        <div class="col-sm-4">
+                                            <input type="number" name="height" class="form-control" 
+                                                   placeholder="0.00" step="0.01" value="{{ old('height') }}">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Shipping Class</label>
+                                        <div class="col-sm-10">
+                                            <select name="shipping_class_id" class="form-control">
+                                                <option value="">Select Shipping Class</option>
+                                                <!-- Add shipping classes options -->
+                                            </select>
+                                        </div>
+                                    </div>
+                                </fieldset>
+                                
+                                <hr>
+                                
+                                <fieldset>
+                                    <h4>Tax Information</h4>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Tax Class</label>
+                                        <div class="col-sm-10">
+                                            <select name="tax_class_id" class="form-control">
+                                                <option value="">Select Tax Class</option>
+                                                <!-- Add tax classes options -->
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Tax Status</label>
+                                        <div class="col-sm-10">
+                                            <select name="tax_status" class="form-control">
+                                                <option value="taxable" {{ old('tax_status') == 'taxable' ? 'selected' : '' }}>Taxable</option>
+                                                <option value="none" {{ old('tax_status') == 'none' ? 'selected' : '' }}>None</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </fieldset>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Submit Buttons --}}
+        <div class="row mt-3">
+            <div class="col-lg-12">
+                <div class="text-right">
+                    <button type="button" class="btn btn-secondary" onclick="window.location.href='{{ route('admin.products.index') }}'">
+                        <i class="fa fa-times"></i> Cancel
+                    </button>
+                    <button type="submit" name="action" value="draft" class="btn btn-warning">
+                        <i class="fa fa-save"></i> Save as Draft
+                    </button>
+                    <button type="submit" name="action" value="publish" class="btn btn-primary">
+                        <i class="fa fa-check"></i> Save & Publish
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+</div>
+@endsection
+
+@push('scripts')
+<script src="{{ asset('js/plugins/summernote/summernote-bs4.js') }}"></script>
+<script src="{{ asset('js/plugins/datapicker/bootstrap-datepicker.js') }}"></script>
+<script src="{{ asset('js/plugins/dropzone/dropzone.js') }}"></script>
+<script src="{{ asset('js/plugins/select2/select2.full.min.js') }}"></script>
+<script src="{{ asset('js/plugins/jsTree/jstree.min.js') }}"></script>
+<script src="{{ asset('js/plugins/switchery/switchery.js') }}"></script>
+<script src="{{ asset('js/plugins/toastr/toastr.min.js') }}"></script>
+<script src="{{ asset('js/plugins/sweetalert/sweetalert.min.js') }}"></script>
+
+<script>
+Dropzone.autoDiscover = false;
+
+$(document).ready(function(){
+    let variantCount = 0;
+    let discountCount = 0;
+    let uploadedImages = [];
+
+    // Initialize components
+    initializeSummernote();
+    initializeSelect2();
+    initializeSwitchery();
+    initializeDropzone();
+    initializeCategoryTree();
+    initializeDatePickers();
+
+    // Configure toastr
+    toastr.options = {
+        closeButton: true,
+        debug: false,
+        newestOnTop: false,
+        progressBar: true,
+        positionClass: "toast-top-right",
+        preventDuplicates: false,
+        onclick: null,
+        showDuration: "300",
+        hideDuration: "1000",
+        timeOut: "5000",
+        extendedTimeOut: "1000",
+        showEasing: "swing",
+        hideEasing: "linear",
+        showMethod: "fadeIn",
+        hideMethod: "fadeOut"
+    };
+
+    // Summernote
+    function initializeSummernote() {
+        $('.summernote').summernote({
+            height: 200,
+            callbacks: {
+                onChange: function(contents, $editable) {
+                    $('#description').val(contents);
+                }
+            }
+        });
+    }
+
+    // Select2
+    function initializeSelect2() {
+        $('.select2').select2({
+            width: '100%'
+        });
+    }
+
+    // Switchery
+    function initializeSwitchery() {
+        $('.js-switch').each(function() {
+            new Switchery(this, {
+                color: '#1AB394',
+                size: 'small'
+            });
+        });
+    }
+
+    // Dropzone
+    function initializeDropzone() {
+        const dropzone = new Dropzone("#productDropzone", {
+            url: "{{ route('admin.products.upload-image') }}",
+            paramName: "file",
+            maxFilesize: 5,
+            acceptedFiles: "image/*",
+            addRemoveLinks: true,
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(file, response) {
+                console.log('Image uploaded:', response);
+                uploadedImages.push({
+                    id: response.id,
+                    filename: response.filename,
+                    original_name: response.original_name,
+                    path: response.path
+                });
+                addImageToTable(response, uploadedImages.length);
+                $('#imageTable').show();
+            },
+            error: function(file, errorMessage) {
+                console.error('Upload error:', errorMessage);
+                toastr.error('Failed to upload image: ' + (errorMessage.message || errorMessage));
+            },
+            removedfile: function(file) {
+                const imageIndex = uploadedImages.findIndex(img => img.filename === file.upload?.filename);
+                if (imageIndex > -1) {
+                    uploadedImages.splice(imageIndex, 1);
+                    $(`#image-row-${imageIndex}`).remove();
+                }
+                file.previewElement.remove();
+            }
+        });
+    }
+
+    // Category Tree
+    function initializeCategoryTree() {
+        // Debug the category data
+        console.log('Category tree data:', {!! json_encode($categoryTree) !!});
+            
+        $('#categoryTree').jstree({
+            'core': {
+                'data': {!! json_encode($categoryTree) !!},
+                'themes': {
+                    'responsive': false
+                }
+            },
+            'checkbox': {
+                'keep_selected_style': false,
+                'three_state': false, // Disable parent/child auto-selection
+                'cascade': 'up' // Only cascade up to parents
+            },
+            'plugins': ['checkbox']
+        }).on('ready.jstree', function(e, data) {
+            console.log('JSTree is ready');
+            console.log('Available nodes:', data.instance.get_json('#', {flat: true}));
+        }).on('changed.jstree', function(e, data) {
+            console.log('JSTree selection changed:', {
+                selected: data.selected,
+                action: data.action,
+                node: data.node
+            });
+        });
+    }
+
+    function debugCategorySelection() {
+        const selected = $('#categoryTree').jstree('get_selected');
+        const selectedFull = $('#categoryTree').jstree('get_selected', true);
+        
+        console.log('=== CATEGORY DEBUG ===');
+        console.log('Selected IDs:', selected);
+        console.log('Selected Full Objects:', selectedFull);
+        console.log('JSTree instance:', $('#categoryTree').jstree(true));
+        
+        return selected;
+    }
+
+    // Date Pickers
+    function initializeDatePickers() {
+        $('.input-group.date, .datepicker').datepicker({
+            todayBtn: "linked",
+            keyboardNavigation: false,
+            forceParse: false,
+            calendarWeeks: true,
+            autoclose: true,
+            format: 'yyyy-mm-dd'
+        });
+    }
+
+    // Add image to table
+    function addImageToTable(image, index) {
+        const row = `
+            <tr id="image-row-${index}">
+                <td>
+                    <img src="${image.path}" class="image-preview">
+                </td>
+                <td>
+                    <input type="hidden" name="images[${index}][id]" value="${image.id}">
+                    <input type="hidden" name="images[${index}][path]" value="${image.path}">
+                    <input type="text" name="images[${index}][name]" class="form-control" value="${image.original_name}">
+                </td>
+                <td>
+                    <input type="text" name="images[${index}][alt_text]" class="form-control" placeholder="Alt text">
+                </td>
+                <td>
+                    <input type="number" name="images[${index}][sort_order]" class="form-control" value="${index}" min="1">
+                </td>
+                <td>
+                    <input type="radio" name="primary_image" value="${index}" ${index === 1 ? 'checked' : ''}>
+                </td>
+                <td>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="removeImageRow(${index})">
+                        <i class="fa fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+        $('#imageTableBody').append(row);
+    }
+
+    // Updated Add Variant function in your JavaScript
+    $('#addVariant').click(function() {
+        variantCount++;
+        const variantHtml = `
+            <div class="variant-row border p-3 mb-3" id="variant-${variantCount}">
+                <div class="d-flex justify-content-between">
+                    <h5>Variant #${variantCount}</h5>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="removeVariant(${variantCount})">
+                        <i class="fa fa-trash"></i> Remove
+                    </button>
+                </div>
+                <div class="row">
+                    <div class="col-md-2">
+                        <div class="form-group">
+                            <label>Variant Images</label>
+                            <div class="dropzone variant-dropzone" id="variantDropzone-${variantCount}">
+                                <div class="dz-message">
+                                    <h4>Drop variant images here or click to upload.</h4>
+                                    <em>(Images specific to this variant)</em>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="table-responsive mt-2">
+                            <table class="table table-sm table-bordered variant-image-table" id="variantImageTable-${variantCount}" style="display: none;">
+                                <thead>
+                                <tr>
+                                    <th width="80">Preview</th>
+                                    <th>Image Name</th>
+                                    <th>Alt Text</th>
+                                    <th width="100">Sort Order</th>
+                                    <th width="80">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody id="variantImageTableBody-${variantCount}">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="col-md-10">
+                        <div class="row">
+                            <div class="col-sm-3">
+                                <div class="form-group">
+                                    <label>Attribute Type</label>
+                                    <input type="text" name="variants[${variantCount}][type]" class="form-control" placeholder="Contoh: Kaca, Tutup, Lampu, dsb.">
+                                </div>
+                            </div>
+                            <div class="col-sm-3">
+                                <div class="form-group">
+                                    <label>Attribute Name</label>
+                                    <input type="text" name="variants[${variantCount}][color]" class="form-control" placeholder="Size, Color, etc.">
+                                </div>
+                            </div>
+                            <div class="col-sm-3">
+                                <div class="form-group">
+                                    <label>Attribute Value</label>
+                                    <input type="text" name="variants[${variantCount}][value]" class="form-control" placeholder="Large, Red, etc.">
+                                </div>
+                            </div>
+                            <div class="col-sm-3">
+                                <div class="form-group">
+                                    <label>SKU</label>
+                                    <input type="text" name="variants[${variantCount}][sku]" class="form-control" placeholder="Variant SKU">
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="form-group">
+                                    <label>Price</label>
+                                    <div class="input-group">
+                                        <span class="input-group-prepend">
+                                            <span class="input-group-text">Rp</span>
+                                        </span>
+                                        <input type="number" name="variants[${variantCount}][price]" class="form-control" placeholder="0.00" step="0.01">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="form-group">
+                                    <label>Stock (Optional)</label>
+                                    <input type="number" name="variants[${variantCount}][stock_quantity]" class="form-control" placeholder="0" min="0">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('#variantContainer').append(variantHtml);
+        
+        // Initialize dropzone for this variant
+        initializeVariantDropzone(variantCount);
+    });
+
+
+    // Add Discount
+    $('#addDiscount').click(function() {
+        discountCount++;
+        const discountHtml = `
+            <div class="discount-row" id="discount-${discountCount}">
+                <div class="row">
+                    <div class="col-sm-12">
+                        <h5>Discount Rule #${discountCount} 
+                            <button type="button" class="btn btn-sm btn-danger float-right" onclick="removeDiscount(${discountCount})">
+                                <i class="fa fa-trash"></i> Remove
+                            </button>
+                        </h5>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-sm-2">
+                        <div class="form-group">
+                            <label>Customer Group</label>
+                            <select name="discounts[${discountCount}][customer_group_id]" class="form-control">
+                                <option value="">All Customers</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-sm-2">
+                        <div class="form-group">
+                            <label>Min Quantity</label>
+                            <input type="number" name="discounts[${discountCount}][quantity]" class="form-control" placeholder="1" min="1">
+                        </div>
+                    </div>
+                    <div class="col-sm-2">
+                        <div class="form-group">
+                            <label>Discount Type</label>
+                            <select name="discounts[${discountCount}][type]" class="form-control">
+                                <option value="percentage">Percentage</option>
+                                <option value="fixed">Fixed Amount</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-sm-2">
+                        <div class="form-group">
+                            <label>Discount Value</label>
+                            <input type="number" name="discounts[${discountCount}][value]" class="form-control" placeholder="10" step="0.01">
+                        </div>
+                    </div>
+                    <div class="col-sm-2">
+                        <div class="form-group">
+                            <label>Start Date</label>
+                            <div class="input-group date">
+                                <span class="input-group-addon"><i class="fa fa-calendar"></i></span>
+                                <input type="text" name="discounts[${discountCount}][start_date]" class="form-control datepicker">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-sm-2">
+                        <div class="form-group">
+                            <label>End Date</label>
+                            <div class="input-group date">
+                                <span class="input-group-addon"><i class="fa fa-calendar"></i></span>
+                                <input type="text" name="discounts[${discountCount}][end_date]" class="form-control datepicker">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('#discountContainer').append(discountHtml);
+        
+        // Re-initialize datepickers for new elements
+        $('.datepicker').datepicker({
+            todayBtn: "linked",
+            keyboardNavigation: false,
+            forceParse: false,
+            calendarWeeks: true,
+            autoclose: true,
+            format: 'yyyy-mm-dd'
+        });
+    });
+
+    // AJAX Form submission
+    $('#productForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        // Show loading overlay
+        $('#loadingOverlay').show();
+        
+        // Clear previous validation errors
+        $('.is-invalid').removeClass('is-invalid');
+        $('.invalid-feedback').text('');
+        
+        // Update description from summernote
+        $('#description').val($('.summernote').summernote('code'));
+        
+        // Get form data
+        const formData = new FormData();
+        
+        // Collect all form data
+        const formFields = $(this).serializeArray();
+        $.each(formFields, function(i, field) {
+            formData.append(field.name, field.value);
+        });
+        
+        // Get selected categories from jstree
+        const selectedCategories = $('#categoryTree').jstree('get_selected');
+        selectedCategories.forEach((categoryId, index) => {
+            formData.append(`categories[${index}]`, categoryId);
+        });
+        
+        // Set status based on action button
+        const action = $(document.activeElement).val();
+        if (action === 'draft') {
+            formData.set('status', 'draft');
+        } else if (action === 'publish') {
+            formData.set('status', 'published');
+        }
+        
+        // Log all data being sent for debugging
+        console.log('=== FORM DATA BEING SENT ===');
+        for (let [key, value] of formData.entries()) {
+            console.log(key + ': ' + value);
+        }
+        
+        // Debug: Show collected data structure
+        console.log('=== COLLECTED DATA SUMMARY ===');
+        console.log('Categories:', selectedCategories);
+        console.log('Uploaded Images:', uploadedImages);
+        console.log('Variants Count:', variantCount);
+        console.log('Discounts Count:', discountCount);
+        
+        // Send AJAX request
+        $.ajax({
+            url: "{{ route('admin.products.store') }}",
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                console.log('=== SUCCESS RESPONSE ===');
+                console.log(response);
+                
+                $('#loadingOverlay').hide();
+                
+                // Show success message
+                swal({
+                    title: "Success!",
+                    text: response.message,
+                    type: "success",
+                    confirmButtonColor: "#1ab394",
+                    confirmButtonText: "OK"
+                }, function() {
+                    if (response.data && response.data.redirect_url) {
+                        window.location.href = response.data.redirect_url;
+                    } else {
+                        window.location.href = "{{ route('admin.products.index') }}";
+                    }
+                });
+                
+                // Show success toastr as well
+                toastr.success(response.message);
+            },
+            error: function(xhr) {
+                console.log('=== ERROR RESPONSE ===');
+                console.log(xhr.responseJSON);
+                
+                $('#loadingOverlay').hide();
+                
+                const response = xhr.responseJSON;
+                let errorMessage = 'An error occurred while saving the product.';
+                
+                if (response && response.message) {
+                    errorMessage = response.message;
+                }
+                
+                // Show error popup
+                swal({
+                    title: "Error!",
+                    text: errorMessage,
+                    type: "error",
+                    confirmButtonColor: "#dd6b55",
+                    confirmButtonText: "OK"
+                });
+                
+                // Show error toastr
+                toastr.error(errorMessage);
+                
+                // Handle validation errors
+                if (xhr.status === 422 && response.errors) {
+                    console.log('=== VALIDATION ERRORS ===');
+                    console.log(response.errors);
+                    
+                    $.each(response.errors, function(field, messages) {
+                        const input = $(`[name="${field}"]`);
+                        if (input.length) {
+                            input.addClass('is-invalid');
+                            input.siblings('.invalid-feedback').text(messages[0]);
+                        }
+                    });
+                    
+                    // Show validation summary
+                    let errorList = '<ul>';
+                    $.each(response.errors, function(field, messages) {
+                        errorList += '<li>' + field + ': ' + messages[0] + '</li>';
+                    });
+                    errorList += '</ul>';
+                    
+                    swal({
+                        title: "Validation Errors",
+                        text: "Please check the following errors:",
+                        type: "warning",
+                        html: true,
+                        confirmButtonText: "OK"
+                    });
+                }
+            },
+            xhr: function() {
+                var xhr = new window.XMLHttpRequest();
+                xhr.upload.addEventListener("progress", function(evt) {
+                    if (evt.lengthComputable) {
+                        var percentComplete = evt.loaded / evt.total;
+                        console.log('Upload progress: ' + Math.round(percentComplete * 100) + '%');
+                    }
+                }, false);
+                return xhr;
+            }
+        });
+    });
+
+    // Auto-generate slug from name
+    $('input[name="name"]').on('input', function() {
+        const name = $(this).val();
+        const slug = name.toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, '')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .trim('-');
+        $('input[name="slug"]').val(slug);
+    });
+
+    // Auto-generate SKU from name if empty
+    $('input[name="name"]').on('blur', function() {
+        const skuField = $('input[name="sku"]');
+        if (skuField.val() === '') {
+            const name = $(this).val();
+            const sku = name.toUpperCase()
+                .replace(/[^A-Z0-9\s]/g, '')
+                .replace(/\s+/g, '-')
+                .substring(0, 20);
+            skuField.val(sku + '-' + Date.now().toString().slice(-4));
+        }
+    });
+});
+
+// Global functions for removing elements
+function removeVariant(id) {
+    $(`#variant-${id}`).remove();
+}
+
+function removeDiscount(id) {
+    $(`#discount-${id}`).remove();
+}
+
+function removeImageRow(index) {
+    $(`#image-row-${index}`).remove();
+    const imageIndex = uploadedImages.findIndex((img, i) => i === index - 1);
+    if (imageIndex > -1) {
+        uploadedImages.splice(imageIndex, 1);
+    }
+}
+
+// Variant
+// Function to initialize dropzone for variants
+function initializeVariantDropzone(variantId) {
+    const dropzoneId = `#variantDropzone-${variantId}`;
+    
+    const variantDropzone = new Dropzone(dropzoneId, {
+        url: "{{ route('admin.products.upload-image') }}",
+        paramName: "file",
+        maxFilesize: 5,
+        acceptedFiles: "image/*",
+        addRemoveLinks: true,
+        headers: {
+            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+        },
+        success: function(file, response) {
+            console.log(`Variant ${variantId} image uploaded:`, response);
+            
+            // Store variant images in a global object
+            if (!window.variantImages) {
+                window.variantImages = {};
+            }
+            if (!window.variantImages[variantId]) {
+                window.variantImages[variantId] = [];
+            }
+            
+            window.variantImages[variantId].push({
+                id: response.id,
+                filename: response.filename,
+                original_name: response.original_name,
+                path: response.path
+            });
+            
+            addVariantImageToTable(variantId, response, window.variantImages[variantId].length);
+            $(`#variantImageTable-${variantId}`).show();
+        },
+        error: function(file, errorMessage) {
+            console.error(`Variant ${variantId} upload error:`, errorMessage);
+            toastr.error('Failed to upload variant image: ' + (errorMessage.message || errorMessage));
+        },
+        removedfile: function(file) {
+            if (window.variantImages && window.variantImages[variantId]) {
+                const imageIndex = window.variantImages[variantId].findIndex(img => img.filename === file.upload?.filename);
+                if (imageIndex > -1) {
+                    window.variantImages[variantId].splice(imageIndex, 1);
+                    $(`#variant-${variantId}-image-row-${imageIndex}`).remove();
+                }
+            }
+            file.previewElement.remove();
+        }
+    });
+}
+
+// Function to add variant image to table
+function addVariantImageToTable(variantId, image, index) {
+    const row = `
+        <tr id="variant-${variantId}-image-row-${index}">
+            <td>
+                <img src="${image.path}" class="image-preview">
+            </td>
+            <td>
+                <input type="hidden" name="variants[${variantId}][images][${index}][id]" value="${image.id}">
+                <input type="hidden" name="variants[${variantId}][images][${index}][path]" value="${image.path}">
+                <input type="text" name="variants[${variantId}][images][${index}][name]" class="form-control form-control-sm" value="${image.original_name}">
+            </td>
+            <td>
+                <input type="text" name="variants[${variantId}][images][${index}][alt_text]" class="form-control form-control-sm" placeholder="Alt text">
+            </td>
+            <td>
+                <input type="number" name="variants[${variantId}][images][${index}][sort_order]" class="form-control form-control-sm" value="${index}" min="1">
+            </td>
+            <td>
+                <button type="button" class="btn btn-sm btn-danger" onclick="removeVariantImageRow(${variantId}, ${index})">
+                    <i class="fa fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `;
+    $(`#variantImageTableBody-${variantId}`).append(row);
+}
+
+// Global function for removing variant image row
+function removeVariantImageRow(variantId, index) {
+    $(`#variant-${variantId}-image-row-${index}`).remove();
+    if (window.variantImages && window.variantImages[variantId]) {
+        const imageIndex = window.variantImages[variantId].findIndex((img, i) => i === index - 1);
+        if (imageIndex > -1) {
+            window.variantImages[variantId].splice(imageIndex, 1);
+        }
+    }
+}
+
+// Updated removeVariant function to clean up variant images
+function removeVariant(id) {
+    $(`#variant-${id}`).remove();
+    
+    // Clean up variant images from global storage
+    if (window.variantImages && window.variantImages[id]) {
+        delete window.variantImages[id];
+    }
+}
+</script>
+@endpush

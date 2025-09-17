@@ -1,0 +1,1321 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Product;
+use App\Models\ProductCategory;
+use App\Models\ProductMedia;
+use App\Models\ProductVariant;
+use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
+
+class ProductsController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = DB::table('products')
+            ->select([
+                'products.id',
+                'products.name',
+                'products.sku',
+                'products.short_description',
+                'products.type',
+                'products.status',
+                'products.created_at',
+                'brands.name as brand_name',
+                'users.first_name as creator_first_name',
+                'users.last_name as creator_last_name'
+            ])
+            ->leftJoin('brands', 'products.brand_id', '=', 'brands.id')
+            ->leftJoin('users', 'products.created_by', '=', 'users.id')
+            ->whereNull('products.deleted_at')
+            ->orderBy('products.created_at', 'desc');
+
+        // Apply filters
+        $this->applyFilters($query, $request);
+
+        // Paginate with 20 items per page
+        $products = $query->paginate(20);
+
+        // Get brands for filter dropdown
+        $brands = DB::table('brands')
+            ->select('id', 'name')
+            ->where('status', 'active')
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get();
+
+        return view('admin.products.index', compact('products', 'brands'));
+    }
+
+    private function applyFilters($query, $request)
+    {
+        // Search filter
+        if ($request->filled('search')) {
+            $search = '%' . $request->search . '%';
+            $query->where(function($q) use ($search) {
+                $q->where('products.name', 'like', $search)
+                  ->orWhere('products.sku', 'like', $search)
+                  ->orWhere('products.short_description', 'like', $search);
+            });
+        }
+
+        // Status filter
+        if ($request->filled('status')) {
+            $query->where('products.status', $request->status);
+        }
+
+        // Type filter
+        if ($request->filled('type')) {
+            $query->where('products.type', 'like', '%' . $request->type . '%');
+        }
+
+        // Brand filter
+        if ($request->filled('brand_id')) {
+            $query->where('products.brand_id', $request->brand_id);
+        }
+    }
+
+    public function show($id)
+    {
+        $product = DB::table('products')
+            ->select([
+                'products.*',
+                'brands.name as brand_name',
+                'users.first_name as creator_first_name',
+                'users.last_name as creator_last_name'
+            ])
+            ->leftJoin('brands', 'products.brand_id', '=', 'brands.id')
+            ->leftJoin('users', 'products.created_by', '=', 'users.id')
+            ->where('products.id', $id)
+            ->whereNull('products.deleted_at')
+            ->first();
+
+        if (!$product) {
+            return redirect()->route('admin.products.index')
+                ->with('error', 'Product not found!');
+        }
+
+        // Get product categories
+        $categories = DB::table('product_category_relationships as pcr')
+            ->join('product_categories as pc', 'pcr.product_category_id', '=', 'pc.id')
+            ->where('pcr.product_id', $id)
+            ->select('pc.id', 'pc.name', 'pc.slug', 'pcr.is_primary')
+            ->get();
+
+        // Get product variants
+        $variants = DB::table('product_variants')
+            ->where('product_id', $id)
+            ->whereNull('deleted_at')
+            ->orderBy('sort_order')
+            ->get();
+
+        // Get variant attributes for each variant
+        foreach ($variants as $variant) {
+            $variant->attributes = DB::table('variant_attributes')
+                ->where('variant_id', $variant->id)
+                ->get();
+
+            // Get variant store pricing
+            $variant->stores = DB::table('variant_stores as vs')
+                ->join('stores as s', 'vs.store_id', '=', 's.id')
+                ->where('vs.variant_id', $variant->id)
+                ->select('s.name as store_name', 'vs.*')
+                ->get();
+        }
+
+        // Get product media
+        $media = DB::table('product_media')
+            ->where('product_id', $id)
+            ->orderBy('sort_order')
+            ->orderBy('is_featured', 'desc')
+            ->get();
+
+        // Get product stores
+        $productStores = DB::table('product_stores as ps')
+            ->join('stores as s', 'ps.store_id', '=', 's.id')
+            ->where('ps.product_id', $id)
+            ->select('s.name as store_name', 'ps.*')
+            ->get();
+
+        // Get SEO data
+        $seoData = DB::table('product_seo')
+            ->where('product_id', $id)
+            ->get()
+            ->keyBy('store_id');
+
+        // Get tags
+        $tags = DB::table('product_tags as pt')
+            ->join('tags as t', 'pt.tag_id', '=', 't.id')
+            ->where('pt.product_id', $id)
+            ->select('t.id', 't.name', 't.slug')
+            ->get();
+
+        return view('admin.products.show', compact('product', 'categories', 'variants', 'media', 'productStores', 'seoData', 'tags'));
+    }
+
+    public function create()
+    {
+        // Get brands
+        $brands = DB::table('brands')
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->get();
+
+        $categoryTree = $this->buildCategoryTree();
+
+        return view('admin.products.create', compact(
+            'brands',
+            'categoryTree'
+        ));
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
+    {
+        try {
+            // Log all incoming data for debugging
+            Log::info('Product Store Request Data:', [
+                'all_data' => $request->all(),
+                'files' => $request->allFiles(),
+                'variants' => $request->input('variants', []),
+                'categories' => $request->input('categories', []),
+                'images' => $request->input('images', []),
+                'discounts' => $request->input('discounts', [])
+            ]);
+
+            // Enhanced validation to include variant images
+            $validator = Validator::make($request->all(), [
+                'name' => 'required|string|max:255',
+                'sku' => 'required|string|unique:products,sku',
+                'price' => 'required|numeric|min:0',
+                'status' => 'required|in:draft,published,archived',
+                'short_description' => 'nullable|string|max:255',
+                'description' => 'nullable|string',
+                'brand_id' => 'nullable|exists:brands,id',
+                'type' => 'nullable|string|max:100',
+                'barcode' => 'nullable|string|max:100',
+                'model' => 'nullable|string|max:100',
+                'minimum_quantity' => 'nullable|integer|min:1',
+                'sort_order' => 'nullable|integer',
+                'track_stock' => 'nullable|boolean',
+                'is_featured' => 'nullable|boolean',
+                'sale_price' => 'nullable|numeric|min:0',
+                'cost_price' => 'nullable|numeric|min:0',
+                'weight' => 'nullable|numeric|min:0',
+                'length' => 'nullable|numeric|min:0',
+                'width' => 'nullable|numeric|min:0',
+                'height' => 'nullable|numeric|min:0',
+                'tax_status' => 'nullable|in:taxable,none',
+                'meta_title' => 'nullable|string|max:60',
+                'meta_description' => 'nullable|string|max:160',
+                'meta_keywords' => 'nullable|string',
+                'slug' => 'nullable|string|unique:products,slug',
+                
+                // Validation for variants and their images
+                'variants' => 'nullable|array',
+                'variants.*.type' => 'nullable|string|max:100',
+                'variants.*.color' => 'nullable|string|max:100',
+                'variants.*.value' => 'nullable|string|max:100',
+                'variants.*.sku' => 'nullable|string',
+                'variants.*.price' => 'nullable|numeric|min:0',
+                'variants.*.stock_quantity' => 'nullable|integer|min:0',
+                'variants.*.images' => 'nullable|array',
+                'variants.*.images.*.id' => 'nullable|integer',
+                'variants.*.images.*.name' => 'nullable|string',
+                'variants.*.images.*.alt_text' => 'nullable|string',
+                'variants.*.images.*.sort_order' => 'nullable|integer',
+                'variants.*.images.*.path' => 'nullable|string',
+                
+                'categories' => 'nullable|array',
+                'categories.*' => 'exists:product_categories,id',
+                
+                'images' => 'nullable|array',
+                'images.*.id' => 'nullable|integer',
+                'images.*.name' => 'nullable|string',
+                'images.*.alt_text' => 'nullable|string',
+                'images.*.sort_order' => 'nullable|integer',
+                
+                'discounts' => 'nullable|array',
+                'discounts.*.quantity' => 'nullable|integer|min:1',
+                'discounts.*.type' => 'nullable|in:percentage,fixed',
+                'discounts.*.value' => 'nullable|numeric|min:0',
+                'discounts.*.start_date' => 'nullable|date',
+                'discounts.*.end_date' => 'nullable|date|after_or_equal:discounts.*.start_date',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors(),
+                    'debug_data' => [
+                        'request_data' => $request->all(),
+                        'validation_rules' => $validator->getRules()
+                    ]
+                ], 422);
+            }
+
+            DB::beginTransaction();
+
+            // Generate slug if not provided
+            $slug = $request->slug ?: Str::slug($request->name);
+            $originalSlug = $slug;
+            $counter = 1;
+            
+            while (DB::table('products')->where('slug', $slug)->exists()) {
+                $slug = $originalSlug . '-' . $counter;
+                $counter++;
+            }
+
+            // Create main product
+            $product = Product::create([
+                'name' => $request->name,
+                'sku' => $request->sku,
+                'slug' => $slug,
+                'short_description' => $request->short_description,
+                'description' => $request->description,
+                'price' => $request->price,
+                'sale_price' => $request->sale_price,
+                'cost_price' => $request->cost_price,
+                'brand_id' => $request->brand_id,
+                'type' => $request->type,
+                'barcode' => $request->barcode,
+                'model' => $request->model,
+                'minimum_quantity' => $request->minimum_quantity ?? 1,
+                'track_stock' => $request->boolean('track_stock'),
+                'is_featured' => $request->boolean('is_featured'),
+                'status' => $request->status,
+                'weight' => $request->weight,
+                'length' => $request->length,
+                'width' => $request->width,
+                'height' => $request->height,
+                'tax_status' => $request->tax_status ?? 'taxable',
+                'meta_title' => $request->meta_title,
+                'meta_description' => $request->meta_description,
+                'meta_keywords' => $request->meta_keywords,
+     
+            ]);
+
+            Log::info('Product created:', ['product_id' => $product->id]);
+
+            // Handle Categories
+            if ($request->has('categories') && is_array($request->categories)) {
+                $categoriesData = [];
+                foreach ($request->categories as $categoryId) {
+                    $categoriesData[] = [
+                        'id' => (string) Str::uuid(),
+                        'product_id' => $product->id,
+                        'product_category_id' => $categoryId,
+                        'is_primary' => 0,
+                        'created_at' => now(),
+                    ];
+                }
+                
+                if (!empty($categoriesData)) {
+                    DB::table('product_category_relationships')->insert($categoriesData);
+                }
+                
+                Log::info('Categories attached:', ['categories' => $request->categories]);
+            }
+
+            // Handle Main Product Images
+            if ($request->has('images') && is_array($request->images)) {
+                $primaryImageIndex = $request->input('primary_image', 0);
+                $imagesData = [];
+                
+                foreach ($request->images as $index => $imageData) {
+                    $imagesData[] = [
+                        'id' => (string) Str::uuid(),
+                        'product_id' => $product->id,
+                        'product_variant_id' => null, // Main product images
+                        'image_path' => $imageData['path'] ?? '',
+                        'image_name' => $imageData['name'] ?? '',
+                        'alt_text' => $imageData['alt_text'] ?? '',
+                        'sort_order' => $imageData['sort_order'] ?? $index,
+                        'is_primary' => ($index == $primaryImageIndex) ? 1 : 0,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                }
+                
+                if (!empty($imagesData)) {
+                    DB::table('product_media')->insert($imagesData);
+                }
+                
+                Log::info('Main product images attached:', ['images_count' => count($request->images)]);
+            }
+
+            // Handle Variants and their Images
+            if ($request->has('variants') && is_array($request->variants)) {
+                foreach ($request->variants as $variantIndex => $variantData) {
+                    $variantId = (string) Str::uuid();
+                    
+                    // Insert variant
+                    DB::table('product_variants')->insert([
+                        'id' => $variantId,
+                        'product_id' => $product->id,
+                        'type' => $variantData['type'] ?? null,
+                        'attribute_name' => $variantData['color'] ?? null,
+                        'attribute_value' => $variantData['value'] ?? null,
+                        'sku' => $variantData['sku'] ?? null,
+                        'price' => $variantData['price'] ?? $request->price,
+                        'stock_quantity' => $variantData['stock_quantity'] ?? 0,
+                        'status' => 'active',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                    Log::info('Variant created:', [
+                        'variant_id' => $variantId,
+                        'variant_index' => $variantIndex,
+                        'variant_data' => $variantData
+                    ]);
+
+                    // Handle variant images
+                    if (isset($variantData['images']) && is_array($variantData['images'])) {
+                        $variantImagesData = [];
+                        
+                        foreach ($variantData['images'] as $imageIndex => $imageData) {
+                            $variantImagesData[] = [
+                                'id' => (string) Str::uuid(),
+                                'product_id' => $product->id,
+                                'product_variant_id' => $variantId,
+                                'image_path' => $imageData['path'] ?? '',
+                                'image_name' => $imageData['name'] ?? '',
+                                'alt_text' => $imageData['alt_text'] ?? '',
+                                'sort_order' => $imageData['sort_order'] ?? $imageIndex,
+                                'is_primary' => 0, // Variant images are never primary for the main product
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ];
+                        }
+                        
+                        if (!empty($variantImagesData)) {
+                            DB::table('product_media')->insert($variantImagesData);
+                            
+                            Log::info('Variant images attached:', [
+                                'variant_id' => $variantId,
+                                'images_count' => count($variantData['images'])
+                            ]);
+                        }
+                    }
+                }
+                
+                Log::info('All variants created:', ['variants_count' => count($request->variants)]);
+            }
+
+            // Handle Discounts (uncomment if you want to use this)
+            /*
+            if ($request->has('discounts') && is_array($request->discounts)) {
+                $discountsData = [];
+                
+                foreach ($request->discounts as $discountData) {
+                    $discountsData[] = [
+                        'id' => (string) Str::uuid(),
+                        'product_id' => $product->id,
+                        'customer_group_id' => $discountData['customer_group_id'] ?? null,
+                        'quantity' => $discountData['quantity'] ?? 1,
+                        'type' => $discountData['type'] ?? 'percentage',
+                        'value' => $discountData['value'] ?? 0,
+                        'start_date' => $discountData['start_date'] ?? null,
+                        'end_date' => $discountData['end_date'] ?? null,
+                        'status' => 'active',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                }
+                
+                if (!empty($discountsData)) {
+                    DB::table('product_discounts')->insert($discountsData);
+                }
+                
+                Log::info('Discounts created:', ['discounts_count' => count($request->discounts)]);
+            }
+            */
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Product created successfully with variants and images!',
+                'data' => [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'redirect_url' => route('admin.products.show', $product->id)
+                ],
+                'debug_info' => [
+                    'processed_data' => [
+                        'categories_count' => count($request->input('categories', [])),
+                        'variants_count' => count($request->input('variants', [])),
+                        'main_images_count' => count($request->input('images', [])),
+                        'variant_images_count' => $this->countVariantImages($request->input('variants', [])),
+                        'discounts_count' => count($request->input('discounts', []))
+                    ]
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            DB::rollback();
+            
+            Log::error('Product creation failed:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create product: ' . $e->getMessage(),
+                'debug_info' => [
+                    'error_details' => $e->getMessage(),
+                    'request_summary' => [
+                        'name' => $request->input('name'),
+                        'sku' => $request->input('sku'),
+                        'variants_count' => count($request->input('variants', [])),
+                        'categories_count' => count($request->input('categories', [])),
+                        'main_images_count' => count($request->input('images', [])),
+                        'variant_images_total' => $this->countVariantImages($request->input('variants', []))
+                    ]
+                ]
+            ], 500);
+        }
+    }
+
+    /**
+     * Count total variant images across all variants
+     */
+    private function countVariantImages($variants)
+    {
+        $totalImages = 0;
+        foreach ($variants as $variant) {
+            if (isset($variant['images']) && is_array($variant['images'])) {
+                $totalImages += count($variant['images']);
+            }
+        }
+        return $totalImages;
+    }
+    /**
+     * Handle image upload for dropzone
+     */
+    public function uploadImage(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120'
+        ]);
+
+        try {
+            $file = $request->file('file');
+            $filename = time() . '_' . Str::random(10) . '.' . $file->getClientOriginalExtension();
+            $path = $file->storeAs('products/temp', $filename, 'public');
+
+            // Store temporary upload info in session or database
+            $uploadId = Str::uuid();
+            DB::table('product_media')->insert([
+                'id' => $uploadId,
+                'file_name' => $filename,
+                'original_name' => $file->getClientOriginalName(),
+                'path' => Storage::url($path),
+                'created_at' => now(),
+            ]);
+
+            return response()->json([
+                'id' => $uploadId,
+                'file_name' => $filename,
+                'original_name' => $file->getClientOriginalName(),
+                'path' => Storage::url($path)
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Build category tree for jsTree
+     */
+    private function buildCategoryTree($parentId = null)
+    {
+        $categories = DB::table('product_categories')
+            ->where('parent_id', $parentId)
+            ->where('status', 'active')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        $tree = [];
+        foreach ($categories as $category) {
+            $children = $this->buildCategoryTree($category->id);
+            
+            $node = [
+                'id' => $category->id,
+                'text' => $category->name,
+                'state' => [
+                    'opened' => $parentId === null
+                ]
+            ];
+
+            if (!empty($children)) {
+                $node['children'] = $children;
+            }
+
+            $tree[] = $node;
+        }
+
+        return $tree;
+    }
+
+    /**
+     * Get uploaded image path from temp uploads
+     */
+    private function getUploadedImagePath($uploadId)
+    {
+        $tempUpload = DB::table('temp_uploads')->where('id', $uploadId)->first();
+        
+        if ($tempUpload) {
+            // Move from temp to permanent location
+            $tempPath = str_replace('/storage/', '', $tempUpload->path);
+            $permanentPath = 'products/' . $tempUpload->filename;
+            
+            Storage::disk('public')->move($tempPath, $permanentPath);
+            
+            // Clean up temp record
+            DB::table('temp_uploads')->where('id', $uploadId)->delete();
+            
+            return Storage::url($permanentPath);
+        }
+
+        return null;
+    }
+
+    private function getFlatCategoriesForDropdown()
+    {
+        $categories = DB::table('product_categories')
+            ->whereNull('deleted_at')
+            ->where('status', 'active')
+            ->orderBy('path')
+            ->orderBy('sort_order')
+            ->get();
+
+        $options = [];
+        foreach ($categories as $category) {
+            $prefix = str_repeat('— ', $category->level);
+            $options[] = (object) [
+                'id' => $category->id,
+                'name' => $prefix . $category->name,
+                'level' => $category->level
+            ];
+        }
+
+        return $options;
+    }
+
+    // public function store(Request $request)
+    // {
+    //     $request->validate([
+    //         'name' => 'required|string|max:200',
+    //         'slug' => 'required|string|max:200|unique:products,slug',
+    //         'short_description' => 'nullable|string',
+    //         'description' => 'nullable|string',
+    //         'sku' => 'nullable|string|max:100|unique:products,sku',
+    //         'brand_id' => 'nullable|uuid|exists:brands,id',
+    //         'type' => 'required|in:simple,variable,grouped,external,digital',
+    //         'status' => 'required|in:draft,published,archived,out_of_stock',
+    //         'featured' => 'boolean',
+    //         'weight' => 'nullable|numeric|min:0',
+    //         'dimensions_length' => 'nullable|numeric|min:0',
+    //         'dimensions_width' => 'nullable|numeric|min:0',
+    //         'dimensions_height' => 'nullable|numeric|min:0',
+    //         'requires_shipping' => 'boolean',
+    //         'is_digital' => 'boolean',
+    //         'download_limit' => 'nullable|integer|min:1',
+    //         'download_expiry' => 'nullable|integer|min:1',
+    //         'external_url' => 'nullable|url',
+    //         'button_text' => 'nullable|string|max:100',
+    //         'categories' => 'nullable|array',
+    //         'categories.*' => 'uuid|exists:product_categories,id',
+    //         'primary_category' => 'nullable|uuid|exists:product_categories,id',
+    //         'stores' => 'nullable|array',
+    //         'stores.*' => 'uuid|exists:stores,id',
+    //         'tags' => 'nullable|array',
+    //         'tags.*' => 'uuid|exists:tags,id',
+    //         'variants' => 'nullable|array',
+    //         'variants.*.sku' => 'required|string|max:100|unique:product_variants,sku',
+    //         'variants.*.name' => 'nullable|string|max:200',
+    //         'variants.*.attributes' => 'nullable|array',
+    //         'variants.*.stores' => 'nullable|array',
+    //         'images' => 'nullable|array',
+    //         'images.*' => 'image|mimes:jpeg,png,jpg,gif|max:2048',
+    //         'seo' => 'nullable|array',
+    //     ]);
+
+    //     DB::beginTransaction();
+        
+    //     try {
+    //         $productId = Str::uuid();
+
+    //         $data = [
+    //             'id' => $productId,
+    //             'name' => $request->name,
+    //             'slug' => $request->slug,
+    //             'short_description' => $request->short_description,
+    //             'description' => $request->description,
+    //             'sku' => $request->sku,
+    //             'brand_id' => $request->brand_id,
+    //             'type' => $request->type,
+    //             'status' => $request->status,
+    //             'featured' => $request->boolean('featured'),
+    //             'weight' => $request->weight,
+    //             'dimensions_length' => $request->dimensions_length,
+    //             'dimensions_width' => $request->dimensions_width,
+    //             'dimensions_height' => $request->dimensions_height,
+    //             'requires_shipping' => $request->boolean('requires_shipping', true),
+    //             'is_digital' => $request->boolean('is_digital'),
+    //             'download_limit' => $request->download_limit,
+    //             'download_expiry' => $request->download_expiry,
+    //             'external_url' => $request->external_url,
+    //             'button_text' => $request->button_text,
+    //             'created_by' => session('admin_user_id'),
+    //             'created_at' => now(),
+    //             'updated_at' => now(),
+    //         ];
+
+    //         DB::table('products')->insert($data);
+
+    //         // Handle categories
+    //         if ($request->has('categories') && is_array($request->categories)) {
+    //             foreach ($request->categories as $categoryId) {
+    //                 DB::table('product_category_relationships')->insert([
+    //                     'id' => Str::uuid(),
+    //                     'product_id' => $productId,
+    //                     'category_id' => $categoryId,
+    //                     'is_primary' => $categoryId === $request->primary_category,
+    //                     'created_at' => now(),
+    //                 ]);
+    //             }
+    //         }
+
+    //         // Handle store relationships
+    //         if ($request->has('stores') && is_array($request->stores)) {
+    //             foreach ($request->stores as $storeId) {
+    //                 DB::table('product_stores')->insert([
+    //                     'id' => Str::uuid(),
+    //                     'product_id' => $productId,
+    //                     'store_id' => $storeId,
+    //                     'is_active' => true,
+    //                     'created_at' => now(),
+    //                     'updated_at' => now(),
+    //                 ]);
+    //             }
+    //         }
+
+    //         // Handle tags
+    //         if ($request->has('tags') && is_array($request->tags)) {
+    //             foreach ($request->tags as $tagId) {
+    //                 DB::table('product_tags')->insert([
+    //                     'id' => Str::uuid(),
+    //                     'product_id' => $productId,
+    //                     'tag_id' => $tagId,
+    //                     'created_at' => now(),
+    //                 ]);
+    //             }
+    //         }
+
+    //         // Handle variants
+    //         if ($request->has('variants') && is_array($request->variants)) {
+    //             foreach ($request->variants as $index => $variantData) {
+    //                 $variantId = Str::uuid();
+                    
+    //                 DB::table('product_variants')->insert([
+    //                     'id' => $variantId,
+    //                     'product_id' => $productId,
+    //                     'sku' => $variantData['sku'],
+    //                     'name' => $variantData['name'] ?? null,
+    //                     'description' => $variantData['description'] ?? null,
+    //                     'weight' => $variantData['weight'] ?? null,
+    //                     'dimensions_length' => $variantData['dimensions_length'] ?? null,
+    //                     'dimensions_width' => $variantData['dimensions_width'] ?? null,
+    //                     'dimensions_height' => $variantData['dimensions_height'] ?? null,
+    //                     'sort_order' => $index,
+    //                     'status' => 'active',
+    //                     'created_at' => now(),
+    //                     'updated_at' => now(),
+    //                 ]);
+
+    //                 // Handle variant attributes
+    //                 if (isset($variantData['attributes']) && is_array($variantData['attributes'])) {
+    //                     foreach ($variantData['attributes'] as $attrName => $attrValue) {
+    //                         DB::table('variant_attributes')->insert([
+    //                             'id' => Str::uuid(),
+    //                             'variant_id' => $variantId,
+    //                             'attribute_name' => $attrName,
+    //                             'attribute_value' => $attrValue,
+    //                             'created_at' => now(),
+    //                         ]);
+    //                     }
+    //                 }
+
+    //                 // Handle variant store pricing
+    //                 if (isset($variantData['stores']) && is_array($variantData['stores'])) {
+    //                     foreach ($variantData['stores'] as $storeId => $storeData) {
+    //                         DB::table('variant_stores')->insert([
+    //                             'id' => Str::uuid(),
+    //                             'variant_id' => $variantId,
+    //                             'store_id' => $storeId,
+    //                             'price' => $storeData['price'],
+    //                             'sale_price' => $storeData['sale_price'] ?? null,
+    //                             'cost_price' => $storeData['cost_price'] ?? null,
+    //                             'stock_quantity' => $storeData['stock_quantity'] ?? 0,
+    //                             'min_stock_level' => $storeData['min_stock_level'] ?? 0,
+    //                             'max_stock_level' => $storeData['max_stock_level'] ?? null,
+    //                             'manage_stock' => $storeData['manage_stock'] ?? true,
+    //                             'stock_status' => $storeData['stock_status'] ?? 'in_stock',
+    //                             'is_active' => true,
+    //                             'created_at' => now(),
+    //                             'updated_at' => now(),
+    //                         ]);
+    //                     }
+    //                 }
+    //             }
+    //         }
+
+    //         // Handle images
+    //         if ($request->hasFile('images')) {
+    //             foreach ($request->file('images') as $index => $image) {
+    //                 $path = $image->store('products/images', 'public');
+                    
+    //                 DB::table('product_media')->insert([
+    //                     'id' => Str::uuid(),
+    //                     'product_id' => $productId,
+    //                     'file_path' => $path,
+    //                     'file_name' => pathinfo($path, PATHINFO_BASENAME),
+    //                     'original_name' => $image->getClientOriginalName(),
+    //                     'file_type' => $image->getClientOriginalExtension(),
+    //                     'file_size' => $image->getSize(),
+    //                     'mime_type' => $image->getMimeType(),
+    //                     'media_type' => 'image',
+    //                     'sort_order' => $index,
+    //                     'is_featured' => $index === 0,
+    //                     'created_at' => now(),
+    //                     'updated_at' => now(),
+    //                 ]);
+    //             }
+    //         }
+
+    //         // Handle SEO data
+    //         if ($request->has('seo') && is_array($request->seo)) {
+    //             foreach ($request->seo as $storeId => $seoData) {
+    //                 if (empty(array_filter($seoData))) continue;
+
+    //                 DB::table('product_seo')->insert([
+    //                     'id' => Str::uuid(),
+    //                     'product_id' => $productId,
+    //                     'store_id' => $storeId === 'global' ? null : $storeId,
+    //                     'meta_title' => $seoData['meta_title'] ?? null,
+    //                     'meta_description' => $seoData['meta_description'] ?? null,
+    //                     'meta_keywords' => $seoData['meta_keywords'] ?? null,
+    //                     'og_title' => $seoData['og_title'] ?? null,
+    //                     'og_description' => $seoData['og_description'] ?? null,
+    //                     'og_image' => $seoData['og_image'] ?? null,
+    //                     'canonical_url' => $seoData['canonical_url'] ?? null,
+    //                     'robots' => $seoData['robots'] ?? 'index,follow',
+    //                     'created_at' => now(),
+    //                     'updated_at' => now(),
+    //                 ]);
+    //             }
+    //         }
+
+    //         DB::commit();
+
+    //         return redirect()->route('admin.products.index')
+    //             ->with('success', 'Product created successfully!');
+
+    //     } catch (\Exception $e) {
+    //         DB::rollback();
+    //         return back()->withInput()->with('error', 'Failed to create product: ' . $e->getMessage());
+    //     }
+    // }
+
+    public function edit($id)
+    {
+        $product = DB::table('products')
+            ->select([
+                'products.*',
+                'brands.name as brand_name',
+                'users.first_name as creator_first_name',
+                'users.last_name as creator_last_name'
+            ])
+            ->leftJoin('brands', 'products.brand_id', '=', 'brands.id')
+            ->leftJoin('users', 'products.created_by', '=', 'users.id')
+            ->where('products.id', $id)
+            ->whereNull('products.deleted_at')
+            ->first();
+
+        if (!$product) {
+            return redirect()->route('admin.products.index')
+                ->with('error', 'Product not found!');
+        }
+
+        // Get product categories
+        $categories = DB::table('product_category_relationships as pcr')
+            ->join('product_categories as pc', 'pcr.product_category_id', '=', 'pc.id')
+            ->where('pcr.product_id', $id)
+            ->select('pc.id', 'pc.name', 'pc.slug', 'pcr.is_primary')
+            ->get();
+
+        // Get product variants
+        $variants = DB::table('product_variants')
+            ->where('product_id', $id)
+            ->whereNull('deleted_at')
+            ->orderBy('sort_order')
+            ->get();
+
+        // Get variant attributes for each variant
+        foreach ($variants as $variant) {
+            $variant->attributes = DB::table('variant_attributes')
+                ->where('variant_id', $variant->id)
+                ->get();
+
+            // Get variant store pricing
+            $variant->stores = DB::table('variant_stores as vs')
+                ->join('stores as s', 'vs.store_id', '=', 's.id')
+                ->where('vs.variant_id', $variant->id)
+                ->select('s.name as store_name', 'vs.*')
+                ->get();
+        }
+
+        // Get product media
+        $media = DB::table('product_media')
+            ->where('product_id', $id)
+            ->orderBy('sort_order')
+            ->orderBy('is_featured', 'desc')
+            ->get();
+
+        // Get product stores
+        $productStores = DB::table('product_stores as ps')
+            ->join('stores as s', 'ps.store_id', '=', 's.id')
+            ->where('ps.product_id', $id)
+            ->select('s.name as store_name', 'ps.*')
+            ->get();
+
+        // Get SEO data
+        $seoData = DB::table('product_seo')
+            ->where('product_id', $id)
+            ->get()
+            ->keyBy('store_id');
+
+        // Get tags
+        $tags = DB::table('product_tags as pt')
+            ->join('tags as t', 'pt.tag_id', '=', 't.id')
+            ->where('pt.product_id', $id)
+            ->select('t.id', 't.name', 't.slug')
+            ->get();
+
+        $brands = DB::table('brands')
+            ->get();
+
+        $categoryTree = $this->buildCategoryTree();
+
+        return view('admin.products.edit', compact('product', 'categoryTree', 'brands', 'categories', 'variants', 'media', 'productStores', 'seoData', 'tags'));
+    }
+
+    public function update(Request $request, $id)
+    {
+        $product = DB::table('products')
+            ->where('id', $id)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$product) {
+            return redirect()->route('admin.products.index')
+                ->with('error', 'Product not found!');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'sku' => 'required|string|unique:products,sku',
+            'price' => 'required|numeric|min:0',
+            'status' => 'required|in:draft,published,archived',
+            'short_description' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'brand_id' => 'nullable|exists:brands,id',
+            'type' => 'nullable|string|max:100',
+            'barcode' => 'nullable|string|max:100',
+            'model' => 'nullable|string|max:100',
+            'minimum_quantity' => 'nullable|integer|min:1',
+            'sort_order' => 'nullable|integer',
+            'track_stock' => 'nullable|boolean',
+            'is_featured' => 'nullable|boolean',
+            'sale_price' => 'nullable|numeric|min:0',
+            'cost_price' => 'nullable|numeric|min:0',
+            'weight' => 'nullable|numeric|min:0',
+            'length' => 'nullable|numeric|min:0',
+            'width' => 'nullable|numeric|min:0',
+            'height' => 'nullable|numeric|min:0',
+            'tax_status' => 'nullable|in:taxable,none',
+            'meta_title' => 'nullable|string|max:60',
+            'meta_description' => 'nullable|string|max:160',
+            'meta_keywords' => 'nullable|string',
+            'slug' => 'nullable|string|unique:products,slug',
+            
+            // Validation for arrays
+            'variants' => 'nullable|array',
+            'variants.*.type' => 'nullable|string|max:100',
+            'variants.*.color' => 'nullable|string|max:100',
+            'variants.*.value' => 'nullable|string|max:100',
+            'variants.*.sku' => 'nullable|string',
+            'variants.*.price' => 'nullable|numeric|min:0',
+            'variants.*.stock_quantity' => 'nullable|integer|min:0',
+            
+            'categories' => 'nullable|array',
+            'categories.*' => 'exists:product_categories,id',
+            
+            'images' => 'nullable|array',
+            'images.*.id' => 'nullable|integer',
+            'images.*.name' => 'nullable|string',
+            'images.*.alt_text' => 'nullable|string',
+            'images.*.sort_order' => 'nullable|integer',
+            
+            'discounts' => 'nullable|array',
+            'discounts.*.quantity' => 'nullable|integer|min:1',
+            'discounts.*.type' => 'nullable|in:percentage,fixed',
+            'discounts.*.value' => 'nullable|numeric|min:0',
+            'discounts.*.start_date' => 'nullable|date',
+            'discounts.*.end_date' => 'nullable|date|after_or_equal:discounts.*.start_date',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+                'debug_data' => [
+                    'request_data' => $request->all(),
+                    'validation_rules' => $validator->getRules()
+                ]
+            ], 422);
+        }
+
+        DB::beginTransaction();
+        
+        try {
+            $data = [
+                'name' => $request->name,
+                'sku' => $request->sku,
+                'slug' => $request->slug,
+                'short_description' => $request->short_description,
+                'description' => $request->description,
+                'price' => $request->price,
+                'sale_price' => $request->sale_price,
+                'cost_price' => $request->cost_price,
+                'brand_id' => $request->brand_id,
+                'type' => $request->type,
+                'barcode' => $request->barcode,
+                'model' => $request->model,
+                'minimum_quantity' => $request->minimum_quantity ?? 1,
+                'track_stock' => $request->boolean('track_stock'),
+                'is_featured' => $request->boolean('is_featured'),
+                'status' => $request->status,
+                'weight' => $request->weight,
+                'length' => $request->length,
+                'width' => $request->width,
+                'height' => $request->height,
+                'tax_status' => $request->tax_status ?? 'taxable',
+                'meta_title' => $request->meta_title,
+                'meta_description' => $request->meta_description,
+                'meta_keywords' => $request->meta_keywords,
+                'updated_at' => now(),
+                'created_by' => auth()->id(),
+            ];
+
+            DB::table('products')
+                ->where('id', $id)
+                ->update($data);
+
+            // Update categories
+            DB::table('product_category_relationships')
+                ->where('product_id', $id)
+                ->delete();
+
+            if ($request->has('categories') && is_array($request->categories)) {
+                foreach ($request->categories as $categoryId) {
+                    DB::table('product_category_relationships')->insert([
+                        'id' => Str::uuid(),
+                        'product_id' => $id,
+                        'category_id' => $categoryId,
+                        'is_primary' => $categoryId === $request->primary_category,
+                        'created_at' => now(),
+                    ]);
+                }
+            }
+
+            // Update store relationships
+            DB::table('product_stores')
+                ->where('product_id', $id)
+                ->delete();
+
+            if ($request->has('stores') && is_array($request->stores)) {
+                foreach ($request->stores as $storeId) {
+                    DB::table('product_stores')->insert([
+                        'id' => Str::uuid(),
+                        'product_id' => $id,
+                        'store_id' => $storeId,
+                        'is_active' => true,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
+            // Update tags
+            DB::table('product_tags')
+                ->where('product_id', $id)
+                ->delete();
+
+            if ($request->has('tags') && is_array($request->tags)) {
+                foreach ($request->tags as $tagId) {
+                    DB::table('product_tags')->insert([
+                        'id' => Str::uuid(),
+                        'product_id' => $id,
+                        'tag_id' => $tagId,
+                        'created_at' => now(),
+                    ]);
+                }
+            }
+
+            // Handle new images
+            if ($request->hasFile('new_images')) {
+                $maxSortOrder = DB::table('product_media')
+                    ->where('product_id', $id)
+                    ->max('sort_order') ?? -1;
+
+                foreach ($request->file('new_images') as $index => $image) {
+                    $path = $image->store('products/images', 'public');
+                    
+                    DB::table('product_media')->insert([
+                        'id' => Str::uuid(),
+                        'product_id' => $id,
+                        'file_path' => $path,
+                        'file_name' => pathinfo($path, PATHINFO_BASENAME),
+                        'original_name' => $image->getClientOriginalName(),
+                        'file_type' => $image->getClientOriginalExtension(),
+                        'file_size' => $image->getSize(),
+                        'mime_type' => $image->getMimeType(),
+                        'media_type' => 'image',
+                        'sort_order' => $maxSortOrder + $index + 1,
+                        'is_featured' => false,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
+            // Update SEO data
+            if ($request->has('seo') && is_array($request->seo)) {
+                DB::table('product_seo')
+                    ->where('product_id', $id)
+                    ->delete();
+
+                foreach ($request->seo as $storeId => $seoData) {
+                    if (empty(array_filter($seoData))) continue;
+
+                    DB::table('product_seo')->insert([
+                        'id' => Str::uuid(),
+                        'product_id' => $id,
+                        'store_id' => $storeId === 'global' ? null : $storeId,
+                        'meta_title' => $seoData['meta_title'] ?? null,
+                        'meta_description' => $seoData['meta_description'] ?? null,
+                        'meta_keywords' => $seoData['meta_keywords'] ?? null,
+                        'og_title' => $seoData['og_title'] ?? null,
+                        'og_description' => $seoData['og_description'] ?? null,
+                        'og_image' => $seoData['og_image'] ?? null,
+                        'canonical_url' => $seoData['canonical_url'] ?? null,
+                        'robots' => $seoData['robots'] ?? 'index,follow',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            return redirect()->route('admin.products.show', $id)
+                ->with('success', 'Product updated successfully!');
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            return back()->withInput()->with('error', 'Failed to update product: ' . $e->getMessage());
+        }
+    }
+
+    public function destroy($id)
+    {
+        $product = DB::table('products')
+            ->where('id', $id)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$product) {
+            return response()->json(['error' => 'Product not found!'], 404);
+        }
+
+        // Soft delete
+        DB::table('products')
+            ->where('id', $id)
+            ->update([
+                'deleted_at' => now(),
+                'updated_at' => now()
+            ]);
+
+        // Soft delete variants
+        DB::table('product_variants')
+            ->where('product_id', $id)
+            ->update([
+                'deleted_at' => now(),
+                'updated_at' => now()
+            ]);
+
+        return response()->json(['success' => 'Product deleted successfully!']);
+    }
+
+    public function uploadImages(Request $request, $id)
+    {
+        $request->validate([
+            'images' => 'required|array',
+            'images.*' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+        ]);
+
+        $product = DB::table('products')
+            ->where('id', $id)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$product) {
+            return response()->json(['error' => 'Product not found!'], 404);
+        }
+
+        $uploadedFiles = [];
+        $maxSortOrder = DB::table('product_media')
+            ->where('product_id', $id)
+            ->max('sort_order') ?? -1;
+
+        foreach ($request->file('images') as $index => $image) {
+            $path = $image->store('products/images', 'public');
+            
+            $mediaId = Str::uuid();
+            
+            DB::table('product_media')->insert([
+                'id' => $mediaId,
+                'product_id' => $id,
+                'file_path' => $path,
+                'file_name' => pathinfo($path, PATHINFO_BASENAME),
+                'original_name' => $image->getClientOriginalName(),
+                'file_type' => $image->getClientOriginalExtension(),
+                'file_size' => $image->getSize(),
+                'mime_type' => $image->getMimeType(),
+                'media_type' => 'image',
+                'sort_order' => $maxSortOrder + $index + 1,
+                'is_featured' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $uploadedFiles[] = [
+                'id' => $mediaId,
+                'url' => Storage::url($path),
+                'original_name' => $image->getClientOriginalName(),
+                'sort_order' => $maxSortOrder + $index + 1,
+            ];
+        }
+
+        return response()->json([
+            'success' => 'Images uploaded successfully!',
+            'files' => $uploadedFiles
+        ]);
+    }
+
+    public function deleteImage($productId, $mediaId)
+    {
+        $media = DB::table('product_media')
+            ->where('id', $mediaId)
+            ->where('product_id', $productId)
+            ->first();
+
+        if (!$media) {
+            return response()->json(['error' => 'Image not found!'], 404);
+        }
+
+        // Delete file
+        Storage::disk('public')->delete($media->file_path);
+
+        // Delete record
+        DB::table('product_media')
+            ->where('id', $mediaId)
+            ->delete();
+
+        return response()->json(['success' => 'Image deleted successfully!']);
+    }
+
+    public function reorderImages(Request $request, $id)
+    {
+        $request->validate([
+            'images' => 'required|array',
+            'images.*.id' => 'required|uuid|exists:product_media,id',
+            'images.*.sort_order' => 'required|integer|min:0',
+            'images.*.is_featured' => 'boolean',
+        ]);
+
+        DB::beginTransaction();
+        
+        try {
+            foreach ($request->images as $imageData) {
+                DB::table('product_media')
+                    ->where('id', $imageData['id'])
+                    ->where('product_id', $id)
+                    ->update([
+                        'sort_order' => $imageData['sort_order'],
+                        'is_featured' => $imageData['is_featured'] ?? false,
+                        'updated_at' => now(),
+                    ]);
+            }
+
+            DB::commit();
+            return response()->json(['success' => 'Images reordered successfully!']);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json(['error' => 'Failed to reorder images: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function getVariantsByProduct($id)
+    {
+        $variants = DB::table('product_variants')
+            ->where('product_id', $id)
+            ->whereNull('deleted_at')
+            ->orderBy('sort_order')
+            ->get();
+
+        foreach ($variants as $variant) {
+            $variant->attributes = DB::table('variant_attributes')
+                ->where('variant_id', $variant->id)
+                ->get();
+
+            $variant->stores = DB::table('variant_stores as vs')
+                ->join('stores as s', 'vs.store_id', '=', 's.id')
+                ->where('vs.variant_id', $variant->id)
+                ->select('s.name as store_name', 'vs.*')
+                ->get();
+        }
+
+        return response()->json($variants);
+    }
+}
