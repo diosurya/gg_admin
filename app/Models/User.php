@@ -18,12 +18,27 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
+        'id',
         'name',
         'email',
         'password',
         'role',
         'status'
     ];
+
+    public $incrementing = false; 
+    protected $keyType = 'string';
+
+     protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (empty($model->{$model->getKeyName()})) {
+                $model->{$model->getKeyName()} = (string) Str::uuid();
+            }
+        });
+    }
 
     /**
      * The attributes that should be hidden for serialization.

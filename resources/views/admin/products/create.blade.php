@@ -70,6 +70,13 @@
     color: white;
     text-align: center;
 }
+.store-section {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
 </style>
 @endpush
 
@@ -94,6 +101,7 @@
                     <ul class="nav nav-tabs">
                         <li><a class="nav-link active" data-toggle="tab" href="#tab-basic"> Basic Info</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-details"> Details</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-stores"> Store Assignment</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-variants"> Variants</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-pricing"> Pricing & Discounts</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-images"> Images</a></li>
@@ -240,6 +248,105 @@
                             </div>
                         </div>
 
+                        {{-- Store Assignment Tab --}}
+                        <div id="tab-stores" class="tab-pane">
+                            <div class="panel-body">
+                                <div class="form-group">
+                                    <label class="required-field">Select Stores</label>
+                                    <div class="form-help mb-3">Select the stores where this product will be available</div>
+                                    
+                                    @foreach($stores as $store)
+                                        <div class="store-section">
+                                            <div class="form-check mb-3">
+                                                <input class="form-check-input store-checkbox" type="checkbox" 
+                                                       name="stores[{{ $store->id }}][selected]" 
+                                                       value="1" 
+                                                       id="store-{{ $store->id }}"
+                                                       data-store-id="{{ $store->id }}">
+                                                <label class="form-check-label" for="store-{{ $store->id }}">
+                                                    <strong>{{ $store->name }}</strong>
+                                                    @if($store->description)
+                                                        <br><small class="text-muted">{{ $store->description }}</small>
+                                                    @endif
+                                                </label>
+                                            </div>
+                                            
+                                            <div class="store-details" id="store-details-{{ $store->id }}" style="display: none;">
+                                                <input type="hidden" name="stores[{{ $store->id }}][store_id]" value="{{ $store->id }}">
+                                                
+                                                <div class="row">
+                                                    <div class="col-md-3">
+                                                        <div class="form-group">
+                                                            <label>Price (Rp)</label>
+                                                            <input type="number" name="stores[{{ $store->id }}][price]" 
+                                                                   class="form-control" placeholder="0.00" step="0.01">
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="form-group">
+                                                            <label>Sale Price (Rp)</label>
+                                                            <input type="number" name="stores[{{ $store->id }}][sale_price]" 
+                                                                   class="form-control" placeholder="0.00" step="0.01">
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="form-group">
+                                                            <label>Cost Price (Rp)</label>
+                                                            <input type="number" name="stores[{{ $store->id }}][cost_price]" 
+                                                                   class="form-control" placeholder="0.00" step="0.01">
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="form-group">
+                                                            <label>Stock Quantity</label>
+                                                            <input type="number" name="stores[{{ $store->id }}][stock_quantity]" 
+                                                                   class="form-control" placeholder="0" min="0">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="row">
+                                                    <div class="col-md-3">
+                                                        <div class="form-group">
+                                                            <label>Min Stock Level</label>
+                                                            <input type="number" name="stores[{{ $store->id }}][min_stock_level]" 
+                                                                   class="form-control" placeholder="0" min="0">
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="form-group">
+                                                            <label>Max Stock Level</label>
+                                                            <input type="number" name="stores[{{ $store->id }}][max_stock_level]" 
+                                                                   class="form-control" placeholder="0" min="0">
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="form-group">
+                                                            <label>Stock Status</label>
+                                                            <select name="stores[{{ $store->id }}][stock_status]" class="form-control">
+                                                                <option value="in_stock">In Stock</option>
+                                                                <option value="out_of_stock">Out of Stock</option>
+                                                                <option value="on_backorder">On Backorder</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <div class="form-group">
+                                                            <label>Manage Stock</label>
+                                                            <select name="stores[{{ $store->id }}][manage_stock]" class="form-control">
+                                                                <option value="1">Yes</option>
+                                                                <option value="0">No</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        </div>
+
                         {{-- Variants Tab --}}
                         <div id="tab-variants" class="tab-pane">
                             <div class="panel-body">
@@ -261,7 +368,12 @@
                         <div id="tab-pricing" class="tab-pane">
                             <div class="panel-body">
                                 <fieldset>
-                                    <h4>Pricing</h4>
+                                    <h4>Default Pricing</h4>
+                                    <div class="alert alert-info">
+                                        <i class="fa fa-info-circle"></i>
+                                        These prices will be used as defaults for stores. You can override them in the Store Assignment tab.
+                                    </div>
+                                    
                                     <div class="form-group row">
                                         <label class="col-sm-2 col-form-label required-field">Regular Price</label>
                                         <div class="col-sm-4">
@@ -324,6 +436,21 @@
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>Product Images</label>
+                                    <div class="form-help mb-2">Upload main product images. These will be used across all stores.</div>
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-sm-6">
+                                            <label>Store Filter (Optional)</label>
+                                            <select id="imageStoreFilter" class="form-control select2">
+                                                <option value="">All Stores</option>
+                                                @foreach($stores as $store)
+                                                    <option value="{{ $store->id }}">{{ $store->name }}</option>
+                                                @endforeach
+                                            </select>
+                                            <div class="form-help">Filter images by store (for organization purposes)</div>
+                                        </div>
+                                    </div>
+                                    
                                     <div class="dropzone" id="productDropzone">
                                         <div class="dz-message">
                                             <h3>Drop files here or click to upload.</h3>
@@ -339,6 +466,7 @@
                                             <th>Image Preview</th>
                                             <th>Image Name</th>
                                             <th>Alt Text</th>
+                                            <th>Store Filter</th>
                                             <th>Sort Order</th>
                                             <th>Is Primary</th>
                                             <th>Actions</th>
@@ -532,6 +660,7 @@ $(document).ready(function(){
     initializeDropzone();
     initializeCategoryTree();
     initializeDatePickers();
+    initializeStoreHandlers();
 
     // Configure toastr
     toastr.options = {
@@ -551,6 +680,48 @@ $(document).ready(function(){
         showMethod: "fadeIn",
         hideMethod: "fadeOut"
     };
+
+    // Store Handlers
+    function initializeStoreHandlers() {
+        $('.store-checkbox').on('change', function() {
+            const storeId = $(this).data('store-id');
+            const isChecked = $(this).is(':checked');
+            const detailsDiv = $('#store-details-' + storeId);
+            
+            if (isChecked) {
+                detailsDiv.show();
+                // Copy default prices from pricing tab
+                const defaultPrice = $('input[name="price"]').val();
+                const defaultSalePrice = $('input[name="sale_price"]').val();
+                const defaultCostPrice = $('input[name="cost_price"]').val();
+                
+                if (defaultPrice) {
+                    $(`input[name="stores[${storeId}][price]"]`).val(defaultPrice);
+                }
+                if (defaultSalePrice) {
+                    $(`input[name="stores[${storeId}][sale_price]"]`).val(defaultSalePrice);
+                }
+                if (defaultCostPrice) {
+                    $(`input[name="stores[${storeId}][cost_price]"]`).val(defaultCostPrice);
+                }
+            } else {
+                detailsDiv.hide();
+                // Clear all inputs in this store section
+                detailsDiv.find('input, select').val('');
+            }
+        });
+        
+        // Auto-populate store prices when default prices change
+        $('input[name="price"], input[name="sale_price"], input[name="cost_price"]').on('input', function() {
+            const fieldName = $(this).attr('name');
+            const value = $(this).val();
+            
+            $('.store-checkbox:checked').each(function() {
+                const storeId = $(this).data('store-id');
+                $(`input[name="stores[${storeId}][${fieldName}]"]`).val(value);
+            });
+        });
+    }
 
     // Summernote
     function initializeSummernote() {
@@ -648,18 +819,6 @@ $(document).ready(function(){
         });
     }
 
-    function debugCategorySelection() {
-        const selected = $('#categoryTree').jstree('get_selected');
-        const selectedFull = $('#categoryTree').jstree('get_selected', true);
-        
-        console.log('=== CATEGORY DEBUG ===');
-        console.log('Selected IDs:', selected);
-        console.log('Selected Full Objects:', selectedFull);
-        console.log('JSTree instance:', $('#categoryTree').jstree(true));
-        
-        return selected;
-    }
-
     // Date Pickers
     function initializeDatePickers() {
         $('.input-group.date, .datepicker').datepicker({
@@ -674,6 +833,8 @@ $(document).ready(function(){
 
     // Add image to table
     function addImageToTable(image, index) {
+        const storeOptions = $('#imageStoreFilter').html();
+        
         const row = `
             <tr id="image-row-${index}">
                 <td>
@@ -686,6 +847,11 @@ $(document).ready(function(){
                 </td>
                 <td>
                     <input type="text" name="images[${index}][alt_text]" class="form-control" placeholder="Alt text">
+                </td>
+                <td>
+                    <select name="images[${index}][store_id]" class="form-control">
+                        ${storeOptions}
+                    </select>
                 </td>
                 <td>
                     <input type="number" name="images[${index}][sort_order]" class="form-control" value="${index}" min="1">
@@ -703,9 +869,11 @@ $(document).ready(function(){
         $('#imageTableBody').append(row);
     }
 
-    // Updated Add Variant function in your JavaScript
+    // Add Variant function with store support
     $('#addVariant').click(function() {
         variantCount++;
+        const storeOptions = generateStoreOptions();
+        
         const variantHtml = `
             <div class="variant-row border p-3 mb-3" id="variant-${variantCount}">
                 <div class="d-flex justify-content-between">
@@ -715,7 +883,15 @@ $(document).ready(function(){
                     </button>
                 </div>
                 <div class="row">
-                    <div class="col-md-2">
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label>Store Assignment</label>
+                            <select name="variants[${variantCount}][store_id]" class="form-control select2">
+                                <option value="">Select Store</option>
+                                ${storeOptions}
+                            </select>
+                        </div>
+                        
                         <div class="form-group">
                             <label>Variant Images</label>
                             <div class="dropzone variant-dropzone" id="variantDropzone-${variantCount}">
@@ -741,24 +917,24 @@ $(document).ready(function(){
                             </table>
                         </div>
                     </div>
-                    <div class="col-md-10">
+                    <div class="col-md-9">
                         <div class="row">
                             <div class="col-sm-3">
                                 <div class="form-group">
                                     <label>Attribute Type</label>
-                                    <input type="text" name="variants[${variantCount}][type]" class="form-control" placeholder="Contoh: Kaca, Tutup, Lampu, dsb.">
+                                    <input type="text" name="variants[${variantCount}][type]" class="form-control" placeholder="Color, Size, Material, etc.">
                                 </div>
                             </div>
                             <div class="col-sm-3">
                                 <div class="form-group">
                                     <label>Attribute Name</label>
-                                    <input type="text" name="variants[${variantCount}][color]" class="form-control" placeholder="Size, Color, etc.">
+                                    <input type="text" name="variants[${variantCount}][color]" class="form-control" placeholder="Red, Large, Cotton, etc.">
                                 </div>
                             </div>
                             <div class="col-sm-3">
                                 <div class="form-group">
                                     <label>Attribute Value</label>
-                                    <input type="text" name="variants[${variantCount}][value]" class="form-control" placeholder="Large, Red, etc.">
+                                    <input type="text" name="variants[${variantCount}][value]" class="form-control" placeholder="Value description">
                                 </div>
                             </div>
                             <div class="col-sm-3">
@@ -767,9 +943,12 @@ $(document).ready(function(){
                                     <input type="text" name="variants[${variantCount}][sku]" class="form-control" placeholder="Variant SKU">
                                 </div>
                             </div>
-                            <div class="col-sm-6">
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-sm-4">
                                 <div class="form-group">
-                                    <label>Price</label>
+                                    <label>Price (Rp)</label>
                                     <div class="input-group">
                                         <span class="input-group-prepend">
                                             <span class="input-group-text">Rp</span>
@@ -778,9 +957,20 @@ $(document).ready(function(){
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-sm-6">
+                            <div class="col-sm-4">
                                 <div class="form-group">
-                                    <label>Stock (Optional)</label>
+                                    <label>Sale Price (Rp)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-prepend">
+                                            <span class="input-group-text">Rp</span>
+                                        </span>
+                                        <input type="number" name="variants[${variantCount}][sale_price]" class="form-control" placeholder="0.00" step="0.01">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <div class="form-group">
+                                    <label>Stock Quantity</label>
                                     <input type="number" name="variants[${variantCount}][stock_quantity]" class="form-control" placeholder="0" min="0">
                                 </div>
                             </div>
@@ -791,10 +981,22 @@ $(document).ready(function(){
         `;
         $('#variantContainer').append(variantHtml);
         
+        // Initialize select2 for the new variant
+        $(`#variant-${variantCount} .select2`).select2({
+            width: '100%'
+        });
+        
         // Initialize dropzone for this variant
         initializeVariantDropzone(variantCount);
     });
 
+    function generateStoreOptions() {
+        let options = '';
+        @foreach($stores as $store)
+            options += '<option value="{{ $store->id }}">{{ $store->name }}</option>';
+        @endforeach
+        return options;
+    }
 
     // Add Discount
     $('#addDiscount').click(function() {
@@ -917,13 +1119,6 @@ $(document).ready(function(){
             console.log(key + ': ' + value);
         }
         
-        // Debug: Show collected data structure
-        console.log('=== COLLECTED DATA SUMMARY ===');
-        console.log('Categories:', selectedCategories);
-        console.log('Uploaded Images:', uploadedImages);
-        console.log('Variants Count:', variantCount);
-        console.log('Discounts Count:', discountCount);
-        
         // Send AJAX request
         $.ajax({
             url: "{{ route('admin.products.store') }}",
@@ -992,32 +1187,7 @@ $(document).ready(function(){
                             input.siblings('.invalid-feedback').text(messages[0]);
                         }
                     });
-                    
-                    // Show validation summary
-                    let errorList = '<ul>';
-                    $.each(response.errors, function(field, messages) {
-                        errorList += '<li>' + field + ': ' + messages[0] + '</li>';
-                    });
-                    errorList += '</ul>';
-                    
-                    swal({
-                        title: "Validation Errors",
-                        text: "Please check the following errors:",
-                        type: "warning",
-                        html: true,
-                        confirmButtonText: "OK"
-                    });
                 }
-            },
-            xhr: function() {
-                var xhr = new window.XMLHttpRequest();
-                xhr.upload.addEventListener("progress", function(evt) {
-                    if (evt.lengthComputable) {
-                        var percentComplete = evt.loaded / evt.total;
-                        console.log('Upload progress: ' + Math.round(percentComplete * 100) + '%');
-                    }
-                }, false);
-                return xhr;
             }
         });
     });
@@ -1050,6 +1220,10 @@ $(document).ready(function(){
 // Global functions for removing elements
 function removeVariant(id) {
     $(`#variant-${id}`).remove();
+    // Clean up variant images from global storage
+    if (window.variantImages && window.variantImages[id]) {
+        delete window.variantImages[id];
+    }
 }
 
 function removeDiscount(id) {
@@ -1064,7 +1238,6 @@ function removeImageRow(index) {
     }
 }
 
-// Variant
 // Function to initialize dropzone for variants
 function initializeVariantDropzone(variantId) {
     const dropzoneId = `#variantDropzone-${variantId}`;
@@ -1152,16 +1325,6 @@ function removeVariantImageRow(variantId, index) {
         if (imageIndex > -1) {
             window.variantImages[variantId].splice(imageIndex, 1);
         }
-    }
-}
-
-// Updated removeVariant function to clean up variant images
-function removeVariant(id) {
-    $(`#variant-${id}`).remove();
-    
-    // Clean up variant images from global storage
-    if (window.variantImages && window.variantImages[id]) {
-        delete window.variantImages[id];
     }
 }
 </script>

@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth;
 
 class ProductsController extends Controller
 {
@@ -84,6 +85,7 @@ class ProductsController extends Controller
 
     public function show($id)
     {
+      
         $product = DB::table('products')
             ->select([
                 'products.*',
@@ -136,7 +138,13 @@ class ProductsController extends Controller
             ->orderBy('sort_order')
             ->orderBy('is_featured', 'desc')
             ->get();
-
+        
+        $coverProduct = DB::table('product_media')
+            ->where('product_id', $id)
+            ->where('is_featured', 1)
+            ->orderBy('sort_order')
+            ->orderBy('is_featured', 'desc')
+            ->get();
         // Get product stores
         $productStores = DB::table('product_stores as ps')
             ->join('stores as s', 'ps.store_id', '=', 's.id')
@@ -157,7 +165,7 @@ class ProductsController extends Controller
             ->select('t.id', 't.name', 't.slug')
             ->get();
 
-        return view('admin.products.show', compact('product', 'categories', 'variants', 'media', 'productStores', 'seoData', 'tags'));
+        return view('admin.products.show', compact('product', 'coverProduct', 'categories', 'variants', 'media', 'productStores', 'seoData', 'tags'));
     }
 
     public function create()
@@ -168,9 +176,14 @@ class ProductsController extends Controller
             ->orderBy('name')
             ->get();
 
+        $stores = DB::table('stores')
+            ->orderBy('name')
+            ->get();
+
         $categoryTree = $this->buildCategoryTree();
 
         return view('admin.products.create', compact(
+            'stores',
             'brands',
             'categoryTree'
         ));
@@ -181,6 +194,8 @@ class ProductsController extends Controller
      */
     public function store(Request $request)
     {
+        $user = Auth::user();
+        $user_id = (string) $user->id;
         try {
             // Log all incoming data for debugging
             Log::info('Product Store Request Data:', [
@@ -215,6 +230,7 @@ class ProductsController extends Controller
                 'width' => 'nullable|numeric|min:0',
                 'height' => 'nullable|numeric|min:0',
                 'tax_status' => 'nullable|in:taxable,none',
+
                 'meta_title' => 'nullable|string|max:60',
                 'meta_description' => 'nullable|string|max:160',
                 'meta_keywords' => 'nullable|string',
@@ -229,7 +245,7 @@ class ProductsController extends Controller
                 'variants.*.price' => 'nullable|numeric|min:0',
                 'variants.*.stock_quantity' => 'nullable|integer|min:0',
                 'variants.*.images' => 'nullable|array',
-                'variants.*.images.*.id' => 'nullable|integer',
+                'variants.*.images.*.id' => 'nullable',
                 'variants.*.images.*.name' => 'nullable|string',
                 'variants.*.images.*.alt_text' => 'nullable|string',
                 'variants.*.images.*.sort_order' => 'nullable|integer',
@@ -239,7 +255,7 @@ class ProductsController extends Controller
                 'categories.*' => 'exists:product_categories,id',
                 
                 'images' => 'nullable|array',
-                'images.*.id' => 'nullable|integer',
+                'images.*.id' => 'nullable',
                 'images.*.name' => 'nullable|string',
                 'images.*.alt_text' => 'nullable|string',
                 'images.*.sort_order' => 'nullable|integer',
@@ -302,6 +318,7 @@ class ProductsController extends Controller
                 'meta_title' => $request->meta_title,
                 'meta_description' => $request->meta_description,
                 'meta_keywords' => $request->meta_keywords,
+                'created_by' => $user_id
      
             ]);
 
@@ -310,7 +327,7 @@ class ProductsController extends Controller
             // Handle Categories
             if ($request->has('categories') && is_array($request->categories)) {
                 $categoriesData = [];
-                foreach ($request->categories as $categoryId) {
+                foreach (array_unique($request->categories) as $categoryId) {
                     $categoriesData[] = [
                         'id' => (string) Str::uuid(),
                         'product_id' => $product->id,
@@ -330,39 +347,141 @@ class ProductsController extends Controller
             // Handle Main Product Images
             if ($request->has('images') && is_array($request->images)) {
                 $primaryImageIndex = $request->input('primary_image', 0);
-                $imagesData = [];
                 
                 foreach ($request->images as $index => $imageData) {
-                    $imagesData[] = [
-                        'id' => (string) Str::uuid(),
-                        'product_id' => $product->id,
-                        'product_variant_id' => null, // Main product images
-                        'image_path' => $imageData['path'] ?? '',
-                        'image_name' => $imageData['name'] ?? '',
-                        'alt_text' => $imageData['alt_text'] ?? '',
-                        'sort_order' => $imageData['sort_order'] ?? $index,
-                        'is_primary' => ($index == $primaryImageIndex) ? 1 : 0,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
-                }
-                
-                if (!empty($imagesData)) {
-                    DB::table('product_media')->insert($imagesData);
+                    if (!empty($imageData['path'])) {
+                        $productMediaId = (string) Str::uuid();
+                        
+                        // Extract file info from path
+                        $filePath = $imageData['path'];
+                        $fileName = $imageData['name'] ?? basename($filePath);
+                        $fileSize = 0;
+                        $mimeType = 'image/jpeg';
+                        
+                        // Try to get file info if it exists
+                        if (Storage::disk('public')->exists(str_replace('/storage/', '', $filePath))) {
+                            $fileSize = Storage::disk('public')->size(str_replace('/storage/', '', $filePath));
+                            $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
+                        }
+                        
+                        DB::table('product_media')->insert([
+                            'id' => $productMediaId,
+                            'product_id' => $product->id,
+                            'product_variant_id' => null, // Main product images
+                            'image_path' => $filePath,
+                            'original_name' => $fileName,
+                            'file_name' => basename($filePath),
+                            'file_type' => pathinfo($filePath, PATHINFO_EXTENSION),
+                            'file_size' => $fileSize,
+                            'mime_type' => $mimeType,
+                            'media_type' => 'image',
+                            'sort_order' => $imageData['sort_order'] ?? $index,
+                            'is_primary' => ($index == $primaryImageIndex) ? 1 : 0,
+                            'is_featured' => $request->boolean('is_featured'),
+                            'is_temporary' => 0,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
                 }
                 
                 Log::info('Main product images attached:', ['images_count' => count($request->images)]);
             }
 
-            // Handle Variants and their Images
+           // Handle Variants and their Images
             if ($request->has('variants') && is_array($request->variants)) {
                 foreach ($request->variants as $variantIndex => $variantData) {
                     $variantId = (string) Str::uuid();
-                    
-                    // Insert variant
+                    $productMediaId = null;
+
+                    // Handle variant images safely
+                    if (!empty($variantData['images']) && is_array($variantData['images'])) {
+                        $images = array_values($variantData['images']); // pastikan numerik index
+
+                        // ===== First image =====
+                        $firstImage = $images[0] ?? null;
+                        if ($firstImage && !empty($firstImage['path'])) {
+                            $productMediaId = (string) Str::uuid();
+
+                            $filePath = $firstImage['path'];
+                            $fileName = $firstImage['name'] ?? basename($filePath);
+                            $fileSize = 0;
+                            $mimeType = 'image/jpeg';
+
+                            // cek file kalau ada di storage
+                            if (Storage::disk('public')->exists(str_replace('/storage/', '', $filePath))) {
+                                $fileSize = Storage::disk('public')->size(str_replace('/storage/', '', $filePath));
+                                $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
+                            }
+
+                            DB::table('product_media')->insert([
+                                'id' => $productMediaId,
+                                'product_id' => $product->id,
+                                'product_variant_id' => $variantId,
+                                'image_path' => $filePath,
+                                'original_name' => $fileName,
+                                'file_name' => basename($filePath),
+                                'file_type' => pathinfo($filePath, PATHINFO_EXTENSION),
+                                'file_size' => $fileSize,
+                                'mime_type' => $mimeType,
+                                'media_type' => 'image',
+                                'sort_order' => $firstImage['sort_order'] ?? 0,
+                                'is_primary' => 1,
+                                'is_featured' => 0,
+                                'is_temporary' => 0,
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+                        }
+
+                        // ===== Additional images =====
+                        foreach (array_slice($images, 1) as $imageIndex => $imageData) {
+                            if (!empty($imageData['path'])) {
+                                $additionalMediaId = (string) Str::uuid();
+
+                                $filePath = $imageData['path'];
+                                $fileName = $imageData['name'] ?? basename($filePath);
+                                $fileSize = 0;
+                                $mimeType = 'image/jpeg';
+
+                                if (Storage::disk('public')->exists(str_replace('/storage/', '', $filePath))) {
+                                    $fileSize = Storage::disk('public')->size(str_replace('/storage/', '', $filePath));
+                                    $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
+                                }
+
+                                DB::table('product_media')->insert([
+                                    'id' => $additionalMediaId,
+                                    'product_id' => $product->id,
+                                    'product_variant_id' => $variantId,
+                                    'image_path' => $filePath,
+                                    'original_name' => $fileName,
+                                    'file_name' => basename($filePath),
+                                    'file_type' => pathinfo($filePath, PATHINFO_EXTENSION),
+                                    'file_size' => $fileSize,
+                                    'mime_type' => $mimeType,
+                                    'media_type' => 'image',
+                                    'sort_order' => $imageData['sort_order'] ?? ($imageIndex + 1),
+                                    'is_primary' => 0,
+                                    'is_featured' => 0,
+                                    'is_temporary' => 0,
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                ]);
+                            }
+                        }
+                    } else {
+                        Log::warning('Variant has no valid images', [
+                            'variant_index' => $variantIndex,
+                            'variant_data'  => $variantData
+                        ]);
+                    }
+
+                    // ===== Insert variant with product_media_id reference =====
                     DB::table('product_variants')->insert([
                         'id' => $variantId,
                         'product_id' => $product->id,
+                        'product_media_id' => $productMediaId,
+                        'store_id' => $variantData['store_id'] ?? null,
                         'type' => $variantData['type'] ?? null,
                         'attribute_name' => $variantData['color'] ?? null,
                         'attribute_value' => $variantData['value'] ?? null,
@@ -377,41 +496,15 @@ class ProductsController extends Controller
                     Log::info('Variant created:', [
                         'variant_id' => $variantId,
                         'variant_index' => $variantIndex,
+                        'product_media_id' => $productMediaId,
+                        'store_id' => $variantData['store_id'] ?? null,
                         'variant_data' => $variantData
                     ]);
-
-                    // Handle variant images
-                    if (isset($variantData['images']) && is_array($variantData['images'])) {
-                        $variantImagesData = [];
-                        
-                        foreach ($variantData['images'] as $imageIndex => $imageData) {
-                            $variantImagesData[] = [
-                                'id' => (string) Str::uuid(),
-                                'product_id' => $product->id,
-                                'product_variant_id' => $variantId,
-                                'image_path' => $imageData['path'] ?? '',
-                                'image_name' => $imageData['name'] ?? '',
-                                'alt_text' => $imageData['alt_text'] ?? '',
-                                'sort_order' => $imageData['sort_order'] ?? $imageIndex,
-                                'is_primary' => 0, // Variant images are never primary for the main product
-                                'created_at' => now(),
-                                'updated_at' => now(),
-                            ];
-                        }
-                        
-                        if (!empty($variantImagesData)) {
-                            DB::table('product_media')->insert($variantImagesData);
-                            
-                            Log::info('Variant images attached:', [
-                                'variant_id' => $variantId,
-                                'images_count' => count($variantData['images'])
-                            ]);
-                        }
-                    }
                 }
-                
+
                 Log::info('All variants created:', ['variants_count' => count($request->variants)]);
             }
+
 
             // Handle Discounts (uncomment if you want to use this)
             /*
@@ -493,7 +586,7 @@ class ProductsController extends Controller
     /**
      * Count total variant images across all variants
      */
-    private function countVariantImages($variants)
+     private function countVariantImages($variants)
     {
         $totalImages = 0;
         foreach ($variants as $variant) {
@@ -515,23 +608,16 @@ class ProductsController extends Controller
         try {
             $file = $request->file('file');
             $filename = time() . '_' . Str::random(10) . '.' . $file->getClientOriginalExtension();
-            $path = $file->storeAs('products/temp', $filename, 'public');
-
-            // Store temporary upload info in session or database
-            $uploadId = Str::uuid();
-            DB::table('product_media')->insert([
-                'id' => $uploadId,
-                'file_name' => $filename,
-                'original_name' => $file->getClientOriginalName(),
-                'path' => Storage::url($path),
-                'created_at' => now(),
-            ]);
+            $path = $file->storeAs('products', $filename, 'public');
+            $fullUrl = Storage::url($path);
 
             return response()->json([
-                'id' => $uploadId,
-                'file_name' => $filename,
+                'id' => Str::uuid(),
+                'filename' => $filename,
                 'original_name' => $file->getClientOriginalName(),
-                'path' => Storage::url($path)
+                'path' => $fullUrl,
+                'size' => $file->getSize(),
+                'mime_type' => $file->getMimeType()
             ]);
 
         } catch (\Exception $e) {
@@ -941,7 +1027,6 @@ class ProductsController extends Controller
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'sku' => 'required|string|unique:products,sku',
             'price' => 'required|numeric|min:0',
             'status' => 'required|in:draft,published,archived',
             'short_description' => 'nullable|string|max:255',
@@ -979,7 +1064,7 @@ class ProductsController extends Controller
             'categories.*' => 'exists:product_categories,id',
             
             'images' => 'nullable|array',
-            'images.*.id' => 'nullable|integer',
+            'images.*.id' => 'nullable',
             'images.*.name' => 'nullable|string',
             'images.*.alt_text' => 'nullable|string',
             'images.*.sort_order' => 'nullable|integer',
@@ -1032,6 +1117,7 @@ class ProductsController extends Controller
                 'meta_title' => $request->meta_title,
                 'meta_description' => $request->meta_description,
                 'meta_keywords' => $request->meta_keywords,
+                'is_featured' => $request->boolean('is_featured'),
                 'updated_at' => now(),
                 'created_by' => auth()->id(),
             ];
@@ -1111,7 +1197,7 @@ class ProductsController extends Controller
                         'mime_type' => $image->getMimeType(),
                         'media_type' => 'image',
                         'sort_order' => $maxSortOrder + $index + 1,
-                        'is_featured' => false,
+                        'is_featured' => $request->boolean('is_featured'),
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);

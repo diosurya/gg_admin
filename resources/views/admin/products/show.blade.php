@@ -199,14 +199,22 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-3">
-                            @if($media->where('is_featured', 1)->first())
-                                <img src="{{ asset($media->where('is_featured', 1)->first()->file_path) }}" 
-                                     class="product-image" alt="{{ $product->name }}">
+                          @php
+                                $featured = $media->where('is_featured', 1)->first();
+                                $imageUrl = $featured ? url($featured->image_path) : null;
+                            @endphp
+
+                            @if($featured && $imageUrl)
+                                <img src="{{ $imageUrl }}" 
+                                    class="img-thumbnail" 
+                                    alt="{{ $product->name }}" 
+                                    title="{{ $featured->alt_text ?? $product->name }}">
                             @else
                                 <div class="product-image d-flex align-items-center justify-content-center bg-light">
                                     <i class="fa fa-image fa-3x text-muted"></i>
                                 </div>
                             @endif
+
                         </div>
                         <div class="col-md-9">
                             <div class="detail-row">
@@ -302,10 +310,16 @@
                 <div class="card-body">
                     <div class="product-gallery">
                         @foreach($media as $image)
-                            <img src="{{ asset($image->file_path) }}" 
-                                 alt="{{ $image->alt_text ?? $product->name }}"
-                                 title="{{ $image->alt_text ?? $product->name }}"
-                                 onclick="showImageModal('{{ asset($image->file_path) }}', '{{ $image->alt_text ?? $product->name }}')">
+                            @php
+                                // pastikan ada base url penuh
+                                $imageUrl = url($image->image_path);
+                                $altText = $image->alt_text ?? $product->name;
+                            @endphp
+
+                            <img src="{{ $imageUrl }}"
+                                alt="{{ $altText }}"
+                                title="{{ $altText }}"
+                                onclick="showImageModal('{{ $imageUrl }}', '{{ $altText }}')">
                         @endforeach
                     </div>
                 </div>

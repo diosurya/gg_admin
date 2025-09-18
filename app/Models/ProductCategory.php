@@ -12,6 +12,10 @@ class ProductCategory extends Model
     public $incrementing = false;
     protected $keyType = 'string';
 
+    protected $guarded = [
+        'id',
+    ];
+
     protected static function boot()
     {
         parent::boot();

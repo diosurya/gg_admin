@@ -8,9 +8,13 @@ use Illuminate\Support\Str;
 
 class ProductVariant extends Model
 {
-     protected $table = 'product_variants';
+    protected $table = 'product_variants';
     public $incrementing = false;
     protected $keyType = 'string';
+
+    protected $guarded = [
+        'id',
+    ];
 
     protected static function boot()
     {
