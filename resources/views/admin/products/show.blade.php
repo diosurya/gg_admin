@@ -190,6 +190,27 @@
     <div class="row">
         {{-- Left Column - Basic Info & Images --}}
         <div class="col-lg-8">
+
+        {{-- Store Availability --}}
+        @if($productStores->count() > 0)
+        <div class="product-detail-card">
+            <div class="card-header">
+                <i class="fa fa-store"></i> Store Availability
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    @foreach($productStores as $store)
+                    <div class="col-md-4 mb-3">
+                        <div class="store-pricing">
+                            <h6>{{ $store->store_name }}</h6>
+                            
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+        @endif
             
             {{-- Basic Information --}}
             <div class="product-detail-card">
@@ -371,7 +392,7 @@
                                             @foreach($variant->stores as $store)
                                             <div class="store-pricing">
                                                 <small><strong>{{ $store->store_name }}:</strong></small><br>
-                                                <small>Price: Rp {{ number_format($store->price, 0, ',', '.') }}</small><br>
+                                               <br>
                                                 @if($store->stock_quantity !== null)
                                                 <small>Stock: {{ $store->stock_quantity }}</small>
                                                 @endif
@@ -498,53 +519,6 @@
         </div>
     </div>
 
- 
-
-    {{-- Store Availability --}}
-    @if($productStores->count() > 0)
-    <div class="row">
-        <div class="col-lg-12">
-            <div class="product-detail-card">
-                <div class="card-header">
-                    <i class="fa fa-store"></i> Store Availability
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        @foreach($productStores as $store)
-                        <div class="col-md-4 mb-3">
-                            <div class="store-pricing">
-                                <h6>{{ $store->store_name }}</h6>
-                                <div class="detail-row">
-                                    <span class="detail-label">Price:</span>
-                                    <span class="detail-value price-tag">Rp {{ number_format($store->price, 0, ',', '.') }}</span>
-                                </div>
-                                @if($store->sale_price)
-                                <div class="detail-row">
-                                    <span class="detail-label">Sale Price:</span>
-                                    <span class="detail-value sale-price">Rp {{ number_format($store->sale_price, 0, ',', '.') }}</span>
-                                </div>
-                                @endif
-                                @if($store->stock_quantity !== null)
-                                <div class="detail-row">
-                                    <span class="detail-label">Stock:</span>
-                                    <span class="detail-value">{{ $store->stock_quantity }}</span>
-                                </div>
-                                @endif
-                                <div class="detail-row">
-                                    <span class="detail-label">Status:</span>
-                                    <span class="badge badge-{{ $store->status == 'active' ? 'success' : 'secondary' }}">
-                                        {{ ucfirst($store->status) }}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        @endforeach
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    @endif
 
     {{-- SEO Information --}}
     @if($seoData->count() > 0)

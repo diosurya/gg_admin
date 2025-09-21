@@ -12,10 +12,35 @@ class ProductCategoriesController extends Controller
 {
     public function index(Request $request)
     {
-        // Get categories in tree structure
-        $categories = $this->buildCategoryTree();
+        $query = DB::table('product_categories as pc')
+            ->leftJoin('product_categories as parent', 'pc.parent_id', '=', 'parent.id')
+            ->whereNull('pc.deleted_at')
+            ->select(
+                'pc.*',
+                'parent.name as parent_name'
+            );
 
-        return view('admin.product-categories.index', compact('categories'));
+            if ($request->search) {
+                $query->where(function ($q) use ($request) {
+                    $q->where('pc.name', 'like', "%{$request->search}%")
+                    ->orWhere('pc.slug', 'like', "%{$request->search}%");
+                });
+            }
+
+            if ($request->status) {
+                $query->where('pc.status', $request->status);
+            }
+
+            $perPage = $request->get('per_page', 10);
+
+            $categories = $query
+                ->orderBy('pc.path')
+                ->paginate($perPage)
+                ->appends($request->query());
+            
+            // dd($categories);
+
+            return view('admin.product_categories.index', compact('categories'));
     }
 
     private function buildCategoryTree($parentId = null)
@@ -87,22 +112,37 @@ class ProductCategoriesController extends Controller
         return view('admin.product-categories.show', compact('category', 'parent', 'children', 'media', 'seoData', 'productsCount'));
     }
 
-    public function create(Request $request)
+    public function create()
     {
-        // Get parent categories for dropdown
-        $parentCategories = $this->getFlatCategoriesForDropdown();
+        $parents = DB::table('product_categories')->whereNull('deleted_at')->pluck('name', 'id');
+        return view('admin.product_categories.create', compact('parents'));
+    }
 
-        $parentId = $request->get('parent_id');
-        $parent = null;
-        
-        if ($parentId) {
-            $parent = DB::table('product_categories')
-                ->where('id', $parentId)
-                ->whereNull('deleted_at')
-                ->first();
+    public function reorder(Request $request)
+    {
+        $items = $request->input('items'); 
+
+        foreach ($items as $item) {
+            $level = $item['parent_id'] 
+                ? DB::table('product_categories')->where('id', $item['parent_id'])->value('level') + 1 
+                : 0;
+
+            DB::table('product_categories')->where('id', $item['id'])->update([
+                'parent_id' => $item['parent_id'],
+                'level'     => $level,
+                'sort_order'=> $item['order'],
+                'updated_at'=> Carbon::now()
+            ]);
+
+            // update path juga
+            $path = $item['parent_id'] 
+                ? DB::table('product_categories')->where('id', $item['parent_id'])->value('path') . '/' . $item['id']
+                : $item['id'];
+
+            DB::table('product_categories')->where('id', $item['id'])->update(['path' => $path]);
         }
 
-        return view('admin.product-categories.create', compact('parentCategories', 'parent', 'parentId'));
+        return response()->json(['success' => true]);
     }
 
     private function getFlatCategoriesForDropdown($excludeId = null)
@@ -479,61 +519,61 @@ class ProductCategoriesController extends Controller
         return $categories;
     }
 
-    public function reorder(Request $request)
-    {
-        $request->validate([
-            'categories' => 'required|array',
-            'categories.*.id' => 'required|uuid|exists:product_categories,id',
-            'categories.*.sort_order' => 'required|integer|min:0',
-            'categories.*.parent_id' => 'nullable|uuid|exists:product_categories,id',
-        ]);
+    // public function reorder(Request $request)
+    // {
+    //     $request->validate([
+    //         'categories' => 'required|array',
+    //         'categories.*.id' => 'required|uuid|exists:product_categories,id',
+    //         'categories.*.sort_order' => 'required|integer|min:0',
+    //         'categories.*.parent_id' => 'nullable|uuid|exists:product_categories,id',
+    //     ]);
 
-        DB::beginTransaction();
+    //     DB::beginTransaction();
         
-        try {
-            foreach ($request->categories as $categoryData) {
-                $data = [
-                    'sort_order' => $categoryData['sort_order'],
-                    'updated_at' => now()
-                ];
+    //     try {
+    //         foreach ($request->categories as $categoryData) {
+    //             $data = [
+    //                 'sort_order' => $categoryData['sort_order'],
+    //                 'updated_at' => now()
+    //             ];
 
-                if (isset($categoryData['parent_id'])) {
-                    $data['parent_id'] = $categoryData['parent_id'];
+    //             if (isset($categoryData['parent_id'])) {
+    //                 $data['parent_id'] = $categoryData['parent_id'];
                     
-                    // Recalculate level and path
-                    if ($categoryData['parent_id']) {
-                        $parent = DB::table('product_categories')
-                            ->where('id', $categoryData['parent_id'])
-                            ->first();
+    //                 // Recalculate level and path
+    //                 if ($categoryData['parent_id']) {
+    //                     $parent = DB::table('product_categories')
+    //                         ->where('id', $categoryData['parent_id'])
+    //                         ->first();
                         
-                        if ($parent) {
-                            $data['level'] = $parent->level + 1;
-                            $data['path'] = $parent->path ? $parent->path . '/' . $categoryData['parent_id'] : $categoryData['parent_id'];
-                        }
-                    } else {
-                        $data['level'] = 0;
-                        $data['path'] = null;
-                    }
-                }
+    //                     if ($parent) {
+    //                         $data['level'] = $parent->level + 1;
+    //                         $data['path'] = $parent->path ? $parent->path . '/' . $categoryData['parent_id'] : $categoryData['parent_id'];
+    //                     }
+    //                 } else {
+    //                     $data['level'] = 0;
+    //                     $data['path'] = null;
+    //                 }
+    //             }
 
-                DB::table('product_categories')
-                    ->where('id', $categoryData['id'])
-                    ->update($data);
+    //             DB::table('product_categories')
+    //                 ->where('id', $categoryData['id'])
+    //                 ->update($data);
 
-                // Update children paths if parent changed
-                if (isset($categoryData['parent_id'])) {
-                    $this->updateChildrenPaths($categoryData['id']);
-                }
-            }
+    //             // Update children paths if parent changed
+    //             if (isset($categoryData['parent_id'])) {
+    //                 $this->updateChildrenPaths($categoryData['id']);
+    //             }
+    //         }
 
-            DB::commit();
-            return response()->json(['success' => 'Categories reordered successfully!']);
+    //         DB::commit();
+    //         return response()->json(['success' => 'Categories reordered successfully!']);
 
-        } catch (\Exception $e) {
-            DB::rollback();
-            return response()->json(['error' => 'Failed to reorder categories: ' . $e->getMessage()], 500);
-        }
-    }
+    //     } catch (\Exception $e) {
+    //         DB::rollback();
+    //         return response()->json(['error' => 'Failed to reorder categories: ' . $e->getMessage()], 500);
+    //     }
+    // }
 
     public function uploadMedia(Request $request, $id)
     {

@@ -17,6 +17,9 @@ use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Admin\SeoController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\TagsController;
+use App\Http\Controllers\Admin\PageController;
+use App\Http\Controllers\Admin\SliderController;
+use App\Http\Controllers\Admin\RecommendedProductController;
 
 /*
 |--------------------------------------------------------------------------
@@ -41,6 +44,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/register', [AuthController::class, 'register'])->name('register.post');
     });
 
+    Route::prefix('settings')->name('settings.')->group(function () {
+        Route::resource('sliders', SliderController::class);
+        Route::resource('recommended-products', RecommendedProductController::class);
+    });
+    
     // Authenticated routes
     Route::middleware('auth')->group(function () {
         // Dashboard
@@ -108,6 +116,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('reorder', [ProductCategoriesController::class, 'reorder'])->name('reorder');
             Route::post('{id}/upload-media', [ProductCategoriesController::class, 'uploadMedia'])->name('upload-media');
             Route::delete('{categoryId}/media/{mediaId}', [ProductCategoriesController::class, 'deleteMedia'])->name('delete-media');
+
+            Route::post('/reorder', [ProductCategoriesController::class, 'reorder'])->name('reorder');
         });
 
         // Products Management
@@ -153,10 +163,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/', [BlogsController::class, 'index'])->name('index');
             Route::get('create', [BlogsController::class, 'create'])->name('create');
             Route::post('/', [BlogsController::class, 'store'])->name('store');
-            Route::get('{id}', [BlogsController::class, 'show'])->name('show');
-            Route::get('{id}/edit', [BlogsController::class, 'edit'])->name('edit');
-            Route::put('{id}', [BlogsController::class, 'update'])->name('update');
-            Route::delete('{id}', [BlogsController::class, 'destroy'])->name('destroy');
+            Route::get('{blog}/edit', [BlogsController::class, 'edit'])->name('edit');
+            Route::put('{blog}', [BlogsController::class, 'update'])->name('update');
+            Route::get('{blog}', [BlogsController::class, 'show'])->name('show');
+            Route::delete('{blog}', [BlogsController::class, 'destroy'])->name('destroy');
             
             // Media management
             Route::post('{id}/upload-media', [BlogsController::class, 'uploadMedia'])->name('upload-media');
@@ -235,6 +245,18 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('products/update-pricing', [BulkOperationsController::class, 'updatePricing'])->name('products.update-pricing');
             Route::post('users/update-status', [BulkOperationsController::class, 'updateUserStatus'])->name('users.update-status');
         });
+
+        Route::resource('pages', PageController::class)->except(['show']);
+        // Custom Pages Routes
+        Route::get('pages/{page}', [PageController::class, 'show'])->name('pages.show');
+        // Quick Action Routes
+        Route::patch('pages/{page}/publish', [PageController::class, 'publish'])->name('pages.publish');
+        Route::patch('pages/{page}/unpublish', [PageController::class, 'unpublish'])->name('pages.unpublish');
+        Route::patch('pages/{page}/archive', [PageController::class, 'archive'])->name('pages.archive');
+        Route::post('pages/{page}/duplicate', [PageController::class, 'duplicate'])->name('pages.duplicate');
+        
+        // Bulk Actions Route
+        Route::post('pages/bulk-action', [PageController::class, 'bulkAction'])->name('pages.bulk-action');
         
     });
 });

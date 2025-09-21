@@ -3,7 +3,7 @@
 @section('title', 'Edit Product')
 
 @php
-    $pageTitle = 'Edit Product: ' . $product->name;
+    $pageTitle = 'Edit Product';
     $breadcrumbs = [
         ['title' => 'E-commerce'],
         ['title' => 'Product List', 'url' => route('admin.products.index')],
@@ -73,18 +73,19 @@
     color: white;
     text-align: center;
 }
+.store-section {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
 .existing-image {
     position: relative;
     display: inline-block;
     margin: 5px;
 }
-.existing-image img {
-    max-width: 80px;
-    max-height: 80px;
-    border-radius: 4px;
-    border: 2px solid #ddd;
-}
-.existing-image .remove-image {
+.existing-image .remove-existing {
     position: absolute;
     top: -5px;
     right: -5px;
@@ -94,11 +95,8 @@
     border-radius: 50%;
     width: 20px;
     height: 20px;
-    font-size: 10px;
+    font-size: 12px;
     cursor: pointer;
-}
-.existing-image.featured img {
-    border-color: #28a745;
 }
 </style>
 @endpush
@@ -124,7 +122,8 @@
             <div class="col-md-12">
                 <div class="tabs-container">
                     <ul class="nav nav-tabs">
-                        <li><a class="nav-link active" data-toggle="tab" href="#tab-basic"> Basic Info</a></li>
+                        <li><a class="nav-link active" data-toggle="tab" href="#tab-stores"> Store Assignment</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-basic"> Basic Info</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-details"> Details</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-variants"> Variants</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-pricing"> Pricing & Discounts</a></li>
@@ -135,8 +134,50 @@
                     </ul>
                     
                     <div class="tab-content">
+                        {{-- Store Assignment Tab --}}
+                        <div id="tab-stores" class="tab-pane active">
+                            <div class="panel-body">
+                                <div class="form-group">
+                                    <label class="required-field">Select Stores</label>
+                                    <div class="form-help mb-3">Select the stores where this product will be available</div>
+                                    
+                                    @foreach($stores as $store)
+                                        @php
+                                            $productStore = DB::table('product_stores')
+                                                ->where('product_id', $product->id)
+                                                ->where('store_id', $store->id)
+                                                ->first();
+
+                                            $isSelected = $productStore ? true : false;
+                                        @endphp
+                                        <div class="store-section">
+                                            <div class="form-check mb-3">
+                                                <input class="form-check-input store-checkbox" type="checkbox" 
+                                                       name="stores[{{ $store->id }}][selected]" 
+                                                       value="1" 
+                                                       id="store-{{ $store->id }}"
+                                                       data-store-id="{{ $store->id }}"
+                                                       {{ $isSelected ? 'checked' : '' }}>
+                                                <label class="form-check-label" for="store-{{ $store->id }}">
+                                                    <strong>{{ $store->name }}</strong>
+                                                    @if($store->description)
+                                                        <br><small class="text-muted">{{ $store->description }}</small>
+                                                    @endif
+                                                </label>
+                                            </div>
+                                            
+                                            <div class="store-details" id="store-details-{{ $store->id }}" style="{{ $isSelected ? 'display: block;' : 'display: none;' }}">
+                                                <input type="hidden" name="stores[{{ $store->id }}][store_id]" value="{{ $store->id }}">
+                                                
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        </div>
+
                         {{-- Basic Info Tab --}}
-                        <div id="tab-basic" class="tab-pane active">
+                        <div id="tab-basic" class="tab-pane">
                             <div class="panel-body">
                                 <fieldset>
                                     <div class="form-group row">
@@ -171,7 +212,7 @@
                                         <label class="col-sm-2 col-form-label">Description</label>
                                         <div class="col-sm-10">
                                             <div class="summernote" name="description">
-                                                {{ old('description', $product->description ?? 'Enter detailed product description here...') }}
+                                                {!! old('description', $product->description) ?: 'Enter detailed product description here...' !!}
                                             </div>
                                         </div>
                                         <textarea name="description" id="description" style="display: none;">{{ old('description', $product->description) }}</textarea>
@@ -183,7 +224,7 @@
                                             <select name="brand_id" class="form-control select2">
                                                 <option value="">Select Brand</option>
                                                 @foreach($brands as $brand)
-                                                    <option value="{{ $brand->id }}" {{ old('brand_id', $product->brand_id) == $brand->id ? 'selected' : '' }}>
+                                                    <option value="{{ $brand->id }}" {{ (old('brand_id', $product->brand_id) == $brand->id) ? 'selected' : '' }}>
                                                         {{ $brand->name }}
                                                     </option>
                                                 @endforeach
@@ -237,17 +278,8 @@
                                         <label class="col-sm-2 col-form-label">Minimum Quantity</label>
                                         <div class="col-sm-10">
                                             <input type="number" name="minimum_quantity" class="form-control" 
-                                                   placeholder="1" value="{{ old('minimum_quantity', $product->minimum_quantity ?? 1) }}" min="1">
+                                                   placeholder="1" value="{{ old('minimum_quantity', $product->minimum_quantity ?: 1) }}" min="1">
                                             <div class="form-help">Minimum quantity required for purchase</div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="form-group row">
-                                        <label class="col-sm-2 col-form-label">Sort Order</label>
-                                        <div class="col-sm-10">
-                                            <input type="number" name="sort_order" class="form-control" 
-                                                   placeholder="0" value="{{ old('sort_order', $product->sort_order ?? 0) }}">
-                                            <div class="form-help">Used for ordering products in listings</div>
                                         </div>
                                     </div>
                                     
@@ -286,76 +318,120 @@
                                 <div id="variantContainer">
                                     {{-- Load existing variants --}}
                                     @foreach($variants as $index => $variant)
-                                    <div class="variant-row border p-3 mb-3" id="variant-{{ $index + 1 }}" data-variant-id="{{ $variant->id }}">
-                                        <div class="d-flex justify-content-between">
-                                            <h5>{{ $variant->name ?? 'Variant #' . ($index + 1) }}</h5>
-                                            <button type="button" class="btn btn-sm btn-danger" onclick="removeVariant({{ $index + 1 }})">
-                                                <i class="fa fa-trash"></i> Remove
-                                            </button>
-                                        </div>
-                                        <div class="row">
-                                            <input type="hidden" name="variants[{{ $index + 1 }}][id]" value="{{ $variant->id }}">
-                                            <div class="col-sm-3">
-                                                <div class="form-group">
-                                                    <label>Name</label>
-                                                    <input type="text" name="variants[{{ $index + 1 }}][attribute_name]" class="form-control" 
-                                                           placeholder="Variant name" value="{{ $variant->attribute_name }}">
-                                                </div>
-                                                <div class="form-group">
-                                                    <label>Name</label>
-                                                    <input type="text" name="variants[{{ $index + 1 }}][attribute_value]" class="form-control" 
-                                                           placeholder="Variant value" value="{{ $variant->attribute_value }}">
-                                                </div>
+                                        <div class="variant-row border p-3 mb-3" id="variant-{{ $variant->id }}" data-variant-id="{{ $variant->id }}">
+                                            <div class="d-flex justify-content-between">
+                                                <h5>Variant #{{ $index + 1 }}</h5>
+                                                <button type="button" class="btn btn-sm btn-danger" onclick="removeExistingVariant('{{ $variant->id }}')">
+                                                    <i class="fa fa-trash"></i> Remove
+                                                </button>
                                             </div>
-                                            <div class="col-sm-3">
-                                                <div class="form-group">
-                                                    <label>SKU</label>
-                                                    <input type="text" name="variants[{{ $index + 1 }}][sku]" class="form-control" 
-                                                           placeholder="Variant SKU" value="{{ $variant->sku }}">
-                                                </div>
-                                            </div>
-                                            <div class="col-sm-3">
-                                                <div class="form-group">
-                                                    <label>Price</label>
-                                                    <div class="input-group">
-                                                        <span class="input-group-prepend">
-                                                            <span class="input-group-text">Rp</span>
-                                                        </span>
-                                                        <input type="number" name="variants[{{ $index + 1 }}][price]" class="form-control" 
-                                                               placeholder="0.00" step="0.01" value="{{ $variant->price }}">
+                                            <div class="row">
+                                                <div class="col-md-3">
+                                                    <div class="form-group">
+                                                        <label>Store Assignment</label>
+                                                        <select name="existing_variants[{{ $variant->id }}][store_id]" class="form-control select2">
+                                                            <option value="">Select Store</option>
+                                                            @foreach($stores as $store)
+                                                                <option value="{{ $store->id }}" {{ $variant->store_id == $store->id ? 'selected' : '' }}>
+                                                                    {{ $store->name }}
+                                                                </option>
+                                                            @endforeach
+                                                        </select>
                                                     </div>
-                                                </div>
-                                            </div>
-                                            <div class="col-sm-3">
-                                                <div class="form-group">
-                                                    <label>Stock (Optional)</label>
-                                                    <input type="number" name="variants[{{ $index + 1 }}][stock_quantity]" class="form-control" 
-                                                           placeholder="0" min="0" value="{{ $variant->stock_quantity }}">
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        {{-- Variant Attributes --}}
-                                        <div class="row">
-                                            <div class="col-sm-12">
-                                                <h6>Attributes</h6>
-                                                <div class="row">
-                                                    @foreach($variant->attributes as $attrIndex => $attribute)
-                                                    <div class="col-sm-4">
-                                                        <div class="form-group">
-                                                            <label>{{ $attribute->name }}</label>
-                                                            <input type="hidden" name="variants[{{ $index + 1 }}][attributes][{{ $attrIndex }}][id]" value="{{ $attribute->id }}">
-                                                            <input type="text" name="variants[{{ $index + 1 }}][attributes][{{ $attrIndex }}][name]" class="form-control" 
-                                                                   placeholder="Attribute name" value="{{ $attribute->name }}">
-                                                            <input type="text" name="variants[{{ $index + 1 }}][attributes][{{ $attrIndex }}][value]" class="form-control mt-1" 
-                                                                   placeholder="Attribute value" value="{{ $attribute->value }}">
+                                                    
+                                                    <div class="form-group">
+                                                        <label>Existing Images</label>
+                                                        <div class="existing-images-container">
+                                                            @foreach($variant->media as $media)
+                                                                <div class="existing-image" id="existing-media-{{ $media->id }}">
+                                                                    <img src="{{ asset($media->image_path) }}" class="img-thumbnail">
+                                                                    <button type="button" class="remove-existing" onclick="removeExistingMedia('{{ $media->id }}')">&times;</button>
+                                                                    <input type="hidden" name="existing_variants[{{ $variant->id }}][keep_media][]" value="{{ $media->id }}">
+                                                                </div>
+                                                            @endforeach
                                                         </div>
                                                     </div>
-                                                    @endforeach
+                                                    
+                                                    <div class="form-group">
+                                                        <label>Add New Images</label>
+                                                        <div class="dropzone variant-dropzone" id="variantDropzone-{{ $variant->id }}">
+                                                            <div class="dz-message">
+                                                                <h4>Drop variant images here or click to upload.</h4>
+                                                                <em>(Images specific to this variant)</em>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-9">
+                                                    <input type="hidden" name="existing_variants[{{ $variant->id }}][id]" value="{{ $variant->id }}">
+                                                    
+                                                    <div class="row">
+                                                        <div class="col-sm-3">
+                                                            <div class="form-group">
+                                                                <label>Attribute Type</label>
+                                                                <input type="text" name="existing_variants[{{ $variant->id }}][type]" class="form-control" 
+                                                                       placeholder="Color, Size, Material, etc." value="{{ $variant->type }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-sm-3">
+                                                            <div class="form-group">
+                                                                <label>Attribute Name</label>
+                                                                <input type="text" name="existing_variants[{{ $variant->id }}][color]" class="form-control" 
+                                                                       placeholder="Red, Large, Cotton, etc." value="{{ $variant->attribute_name }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-sm-3">
+                                                            <div class="form-group">
+                                                                <label>Attribute Value</label>
+                                                                <input type="text" name="existing_variants[{{ $variant->id }}][value]" class="form-control" 
+                                                                       placeholder="Value description" value="{{ $variant->attribute_value }}">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-sm-3">
+                                                            <div class="form-group">
+                                                                <label>SKU</label>
+                                                                <input type="text" name="existing_variants[{{ $variant->id }}][sku]" class="form-control" 
+                                                                       placeholder="Variant SKU" value="{{ $variant->sku }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div class="row">
+                                                        <div class="col-sm-4">
+                                                            <div class="form-group">
+                                                                <label>Price (Rp)</label>
+                                                                <div class="input-group">
+                                                                    <span class="input-group-prepend">
+                                                                        <span class="input-group-text">Rp</span>
+                                                                    </span>
+                                                                    <input type="number" name="existing_variants[{{ $variant->id }}][price]" class="form-control" 
+                                                                           placeholder="0.00" step="0.01" value="{{ $variant->price }}">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-sm-4">
+                                                            <div class="form-group">
+                                                                <label>Sale Price (Rp)</label>
+                                                                <div class="input-group">
+                                                                    <span class="input-group-prepend">
+                                                                        <span class="input-group-text">Rp</span>
+                                                                    </span>
+                                                                    <input type="number" name="existing_variants[{{ $variant->id }}][sale_price]" class="form-control" 
+                                                                           placeholder="0.00" step="0.01" value="{{ $variant->sale_price }}">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-sm-4">
+                                                            <div class="form-group">
+                                                                <label>Stock Quantity</label>
+                                                                <input type="number" name="existing_variants[{{ $variant->id }}][stock_quantity]" class="form-control" 
+                                                                       placeholder="0" min="0" value="{{ $variant->stock_quantity }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
                                     @endforeach
                                 </div>
                             </div>
@@ -365,7 +441,12 @@
                         <div id="tab-pricing" class="tab-pane">
                             <div class="panel-body">
                                 <fieldset>
-                                    <h4>Pricing</h4>
+                                    <h4>Default Pricing</h4>
+                                    <div class="alert alert-info">
+                                        <i class="fa fa-info-circle"></i>
+                                        These prices will be used as defaults for stores. You can override them in the Store Assignment tab.
+                                    </div>
+                                    
                                     <div class="form-group row">
                                         <label class="col-sm-2 col-form-label required-field">Regular Price</label>
                                         <div class="col-sm-4">
@@ -426,34 +507,36 @@
                         {{-- Images Tab --}}
                         <div id="tab-images" class="tab-pane">
                             <div class="panel-body">
-                                {{-- Existing Images --}}
-                                @if($media->count() > 0)
                                 <div class="form-group">
-                                    <label>Existing Images</label>
-                                    <div id="existingImages" class="mb-3">
-                                        @foreach($media as $image)
-                                        <div class="existing-image {{ $image->is_featured ? 'featured' : '' }}" data-image-id="{{ $image->id }}">
-                                            <img src="{{ asset($image->file_path) }}" alt="{{ $image->alt_text }}">
-                                            <button type="button" class="remove-image" onclick="removeExistingImage({{ $image->id }})">
-                                                <i class="fa fa-times"></i>
-                                            </button>
-                                            <input type="hidden" name="existing_images[{{ $image->id }}][keep]" value="1">
-                                            <input type="hidden" name="existing_images[{{ $image->id }}][is_featured]" value="{{ $image->is_featured }}">
-                                            <small class="d-block text-center mt-1">
-                                                {{ $image->is_featured ? 'Featured' : 'Gallery' }}
-                                                <br>
-                                                <button type="button" class="btn btn-xs btn-link p-0" onclick="toggleFeatured({{ $image->id }})">
-                                                    {{ $image->is_featured ? 'Remove Featured' : 'Set Featured' }}
-                                                </button>
-                                            </small>
+                                    <label>Product Images</label>
+                                    <div class="form-help mb-2">Upload main product images. These will be used across all stores.</div>
+                                    
+                                    <div class="form-group">
+                                        <label>Existing Images</label>
+                                        <div class="existing-images-container mb-3">
+                                            @foreach($coverProduct as $media)
+                                                <div class="existing-image" id="existing-main-media-{{ $media->id }}">
+                                                    <img src="{{ $media->image_path }}" class="img-thumbnail" style="max-width:200px;">
+                                                    <button type="button" class="remove-existing" onclick="removeExistingMainMedia('{{ $media->id }}')">&times;</button>
+                                                    <input type="hidden" name="keep_main_media[]" value="{{ $media->id }}">
+                                                </div>
+                                            @endforeach
                                         </div>
-                                        @endforeach
                                     </div>
-                                </div>
-                                @endif
-                                
-                                <div class="form-group">
-                                    <label>Add New Images</label>
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-sm-6">
+                                            <label>Store Filter (Optional)</label>
+                                            <select id="imageStoreFilter" class="form-control select2">
+                                                <option value="">All Stores</option>
+                                                @foreach($stores as $store)
+                                                    <option value="{{ $store->id }}">{{ $store->name }}</option>
+                                                @endforeach
+                                            </select>
+                                            <div class="form-help">Filter images by store (for organization purposes)</div>
+                                        </div>
+                                    </div>
+                                    
                                     <div class="dropzone" id="productDropzone">
                                         <div class="dz-message">
                                             <h3>Drop files here or click to upload.</h3>
@@ -469,6 +552,7 @@
                                             <th>Image Preview</th>
                                             <th>Image Name</th>
                                             <th>Alt Text</th>
+                                            <th>Store Filter</th>
                                             <th>Sort Order</th>
                                             <th>Is Primary</th>
                                             <th>Actions</th>
@@ -504,7 +588,7 @@
                                         <label class="col-sm-2 col-form-label">Meta Title</label>
                                         <div class="col-sm-10">
                                             <input type="text" name="meta_title" class="form-control" 
-                                                   placeholder="SEO meta title" value="{{ old('meta_title', $seoData->first()->meta_title ?? '') }}" maxlength="60">
+                                                   placeholder="SEO meta title" value="{{ old('meta_title', $product->meta_title) }}" maxlength="60">
                                             <div class="form-help">Recommended length: 50-60 characters</div>
                                         </div>
                                     </div>
@@ -513,7 +597,7 @@
                                         <label class="col-sm-2 col-form-label">Meta Description</label>
                                         <div class="col-sm-10">
                                             <textarea name="meta_description" class="form-control" rows="3" 
-                                                      placeholder="SEO meta description" maxlength="160">{{ old('meta_description', $seoData->first()->meta_description ?? '') }}</textarea>
+                                                      placeholder="SEO meta description" maxlength="160">{{ old('meta_description', $product->meta_description) }}</textarea>
                                             <div class="form-help">Recommended length: 150-160 characters</div>
                                         </div>
                                     </div>
@@ -522,7 +606,7 @@
                                         <label class="col-sm-2 col-form-label">Meta Keywords</label>
                                         <div class="col-sm-10">
                                             <input type="text" name="meta_keywords" class="form-control" 
-                                                   placeholder="keyword1, keyword2, keyword3" value="{{ old('meta_keywords', $seoData->first()->meta_keywords ?? '') }}">
+                                                   placeholder="keyword1, keyword2, keyword3" value="{{ old('meta_keywords', $product->meta_keywords) }}">
                                             <div class="form-help">Separate keywords with commas</div>
                                         </div>
                                     </div>
@@ -531,7 +615,7 @@
                                         <label class="col-sm-2 col-form-label">URL Slug</label>
                                         <div class="col-sm-10">
                                             <input type="text" name="slug" class="form-control" 
-                                                   placeholder="product-url-slug" value="{{ old('slug', $seoData->first()->slug ?? '') }}">
+                                                   placeholder="product-url-slug" value="{{ old('slug', $product->slug) }}">
                                             <div class="form-help">Auto-generated from name if left empty</div>
                                         </div>
                                     </div>
@@ -599,7 +683,7 @@
                                         </div>
                                     </div>
                                     
-                                                                            <div class="form-group row">
+                                    <div class="form-group row">
                                         <label class="col-sm-2 col-form-label">Tax Status</label>
                                         <div class="col-sm-10">
                                             <select name="tax_status" class="form-control">
@@ -654,7 +738,9 @@ $(document).ready(function(){
     let variantCount = {{ $variants->count() }};
     let discountCount = 0;
     let uploadedImages = [];
-    let removedImages = [];
+    let removedMainMedia = [];
+    let removedVariantMedia = [];
+    let removedVariants = [];
 
     // Initialize components
     initializeSummernote();
@@ -663,6 +749,8 @@ $(document).ready(function(){
     initializeDropzone();
     initializeCategoryTree();
     initializeDatePickers();
+    initializeStoreHandlers();
+    initializeExistingVariantDropzones();
 
     // Configure toastr
     toastr.options = {
@@ -682,6 +770,48 @@ $(document).ready(function(){
         showMethod: "fadeIn",
         hideMethod: "fadeOut"
     };
+
+    // Store Handlers
+    function initializeStoreHandlers() {
+        $('.store-checkbox').on('change', function() {
+            const storeId = $(this).data('store-id');
+            const isChecked = $(this).is(':checked');
+            const detailsDiv = $('#store-details-' + storeId);
+            
+            if (isChecked) {
+                detailsDiv.show();
+                // Copy default prices from pricing tab
+                const defaultPrice = $('input[name="price"]').val();
+                const defaultSalePrice = $('input[name="sale_price"]').val();
+                const defaultCostPrice = $('input[name="cost_price"]').val();
+                
+                if (defaultPrice) {
+                    $(`input[name="stores[${storeId}][price]"]`).val(defaultPrice);
+                }
+                if (defaultSalePrice) {
+                    $(`input[name="stores[${storeId}][sale_price]"]`).val(defaultSalePrice);
+                }
+                if (defaultCostPrice) {
+                    $(`input[name="stores[${storeId}][cost_price]"]`).val(defaultCostPrice);
+                }
+            } else {
+                detailsDiv.hide();
+                // Clear all inputs in this store section
+                detailsDiv.find('input, select').val('');
+            }
+        });
+        
+        // Auto-populate store prices when default prices change
+        $('input[name="price"], input[name="sale_price"], input[name="cost_price"]').on('input', function() {
+            const fieldName = $(this).attr('name');
+            const value = $(this).val();
+            
+            $('.store-checkbox:checked').each(function() {
+                const storeId = $(this).data('store-id');
+                $(`input[name="stores[${storeId}][${fieldName}]"]`).val(value);
+            });
+        });
+    }
 
     // Summernote
     function initializeSummernote() {
@@ -749,22 +879,41 @@ $(document).ready(function(){
         });
     }
 
+    // Initialize existing variant dropzones
+    function initializeExistingVariantDropzones() {
+        @foreach($variants as $variant)
+            initializeVariantDropzone('{{ $variant->id }}');
+        @endforeach
+    }
+
     // Category Tree
     function initializeCategoryTree() {
-        const selectedCategories = {!! json_encode($categories->pluck('id')->toArray()) !!};
+        const selectedCategories = @json($categories->pluck('id')->toArray());
         
         $('#categoryTree').jstree({
             'core': {
-                'data': {!! json_encode($categoryTree) !!}
+                'data': {!! json_encode($categoryTree) !!},
+                'themes': {
+                    'responsive': false
+                }
             },
             'checkbox': {
-                'keep_selected_style': false
+                'keep_selected_style': false,
+                'three_state': false,
+                'cascade': 'up'
             },
             'plugins': ['checkbox']
-        }).on('ready.jstree', function () {
+        }).on('ready.jstree', function(e, data) {
+            console.log('JSTree is ready');
             // Select existing categories
             selectedCategories.forEach(function(categoryId) {
                 $('#categoryTree').jstree('select_node', categoryId);
+            });
+        }).on('changed.jstree', function(e, data) {
+            console.log('JSTree selection changed:', {
+                selected: data.selected,
+                action: data.action,
+                node: data.node
             });
         });
     }
@@ -781,26 +930,55 @@ $(document).ready(function(){
         });
     }
 
+    // Remove existing main media
+    window.removeExistingMainMedia = function(mediaId) {
+        $(`#existing-main-media-${mediaId}`).remove();
+        removedMainMedia.push(mediaId);
+        // Remove from keep list
+        $(`input[name="keep_main_media[]"][value="${mediaId}"]`).remove();
+    };
+
+    // Remove existing variant media
+    window.removeExistingMedia = function(mediaId) {
+        $(`#existing-media-${mediaId}`).remove();
+        removedVariantMedia.push(mediaId);
+        // Find and remove from keep list
+        $(`input[value="${mediaId}"]`).remove();
+    };
+
+    // Remove existing variant
+    window.removeExistingVariant = function(variantId) {
+        $(`#variant-${variantId}`).remove();
+        removedVariants.push(variantId);
+    };
+
     // Add image to table
     function addImageToTable(image, index) {
+        const storeOptions = $('#imageStoreFilter').html();
+        
         const row = `
             <tr id="image-row-${index}">
                 <td>
                     <img src="${image.path}" class="image-preview">
                 </td>
                 <td>
-                    <input type="hidden" name="new_images[${index}][id]" value="${image.id}">
-                    <input type="hidden" name="new_images[${index}][path]" value="${image.path}">
-                    <input type="text" name="new_images[${index}][name]" class="form-control" value="${image.original_name}">
+                    <input type="hidden" name="images[${index}][id]" value="${image.id}">
+                    <input type="hidden" name="images[${index}][path]" value="${image.path}">
+                    <input type="text" name="images[${index}][name]" class="form-control" value="${image.original_name}">
                 </td>
                 <td>
-                    <input type="text" name="new_images[${index}][alt_text]" class="form-control" placeholder="Alt text">
+                    <input type="text" name="images[${index}][alt_text]" class="form-control" placeholder="Alt text">
                 </td>
                 <td>
-                    <input type="number" name="new_images[${index}][sort_order]" class="form-control" value="${index}" min="1">
+                    <select name="images[${index}][store_id]" class="form-control">
+                        ${storeOptions}
+                    </select>
                 </td>
                 <td>
-                    <input type="radio" name="new_primary_image" value="${index}" ${index === 1 ? 'checked' : ''}>
+                    <input type="number" name="images[${index}][sort_order]" class="form-control" value="${index}" min="1">
+                </td>
+                <td>
+                    <input type="radio" name="primary_image" value="${index}" ${index === 1 ? 'checked' : ''}>
                 </td>
                 <td>
                     <button type="button" class="btn btn-sm btn-danger" onclick="removeImageRow(${index})">
@@ -812,52 +990,119 @@ $(document).ready(function(){
         $('#imageTableBody').append(row);
     }
 
-    // Add Variant
+    // Add Variant function with store support
     $('#addVariant').click(function() {
         variantCount++;
+        const storeOptions = generateStoreOptions();
+        
         const variantHtml = `
-            <div class="variant-row border p-3 mb-3" id="variant-${variantCount}">
+            <div class="variant-row border p-3 mb-3" id="variant-new-${variantCount}">
                 <div class="d-flex justify-content-between">
-                    <h5>Variant #${variantCount}</h5>
-                    <button type="button" class="btn btn-sm btn-danger" onclick="removeVariant(${variantCount})">
+                    <h5>New Variant #${variantCount}</h5>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="removeVariant('new-${variantCount}')">
                         <i class="fa fa-trash"></i> Remove
                     </button>
                 </div>
                 <div class="row">
-                    <div class="col-sm-3">
+                    <div class="col-md-3">
                         <div class="form-group">
-                            <label>Name</label>
-                            <input type="text" name="variants[${variantCount}][name]" class="form-control" placeholder="Variant name">
+                            <label>Store Assignment</label>
+                            <select name="variants[${variantCount}][store_id]" class="form-control select2">
+                                <option value="">Select Store</option>
+                                ${storeOptions}
+                            </select>
                         </div>
-                    </div>
-                    <div class="col-sm-3">
+                        
                         <div class="form-group">
-                            <label>SKU</label>
-                            <input type="text" name="variants[${variantCount}][sku]" class="form-control" placeholder="Variant SKU">
-                        </div>
-                    </div>
-                    <div class="col-sm-3">
-                        <div class="form-group">
-                            <label>Price</label>
-                            <div class="input-group">
-                                <span class="input-group-prepend">
-                                    <span class="input-group-text">Rp</span>
-                                </span>
-                                <input type="number" name="variants[${variantCount}][price]" class="form-control" placeholder="0.00" step="0.01">
+                            <label>Variant Images</label>
+                            <div class="dropzone variant-dropzone" id="variantDropzone-new-${variantCount}">
+                                <div class="dz-message">
+                                    <h4>Drop variant images here or click to upload.</h4>
+                                    <em>(Images specific to this variant)</em>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="col-sm-3">
-                        <div class="form-group">
-                            <label>Stock (Optional)</label>
-                            <input type="number" name="variants[${variantCount}][stock_quantity]" class="form-control" placeholder="0" min="0">
+                    <div class="col-md-9">
+                        <div class="row">
+                            <div class="col-sm-3">
+                                <div class="form-group">
+                                    <label>Attribute Type</label>
+                                    <input type="text" name="variants[${variantCount}][type]" class="form-control" placeholder="Color, Size, Material, etc.">
+                                </div>
+                            </div>
+                            <div class="col-sm-3">
+                                <div class="form-group">
+                                    <label>Attribute Name</label>
+                                    <input type="text" name="variants[${variantCount}][color]" class="form-control" placeholder="Red, Large, Cotton, etc.">
+                                </div>
+                            </div>
+                            <div class="col-sm-3">
+                                <div class="form-group">
+                                    <label>Attribute Value</label>
+                                    <input type="text" name="variants[${variantCount}][value]" class="form-control" placeholder="Value description">
+                                </div>
+                            </div>
+                            <div class="col-sm-3">
+                                <div class="form-group">
+                                    <label>SKU</label>
+                                    <input type="text" name="variants[${variantCount}][sku]" class="form-control" placeholder="Variant SKU">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-sm-4">
+                                <div class="form-group">
+                                    <label>Price (Rp)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-prepend">
+                                            <span class="input-group-text">Rp</span>
+                                        </span>
+                                        <input type="number" name="variants[${variantCount}][price]" class="form-control" placeholder="0.00" step="0.01">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <div class="form-group">
+                                    <label>Sale Price (Rp)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-prepend">
+                                            <span class="input-group-text">Rp</span>
+                                        </span>
+                                        <input type="number" name="variants[${variantCount}][sale_price]" class="form-control" placeholder="0.00" step="0.01">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <div class="form-group">
+                                    <label>Stock Quantity</label>
+                                    <input type="number" name="variants[${variantCount}][stock_quantity]" class="form-control" placeholder="0" min="0">
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         `;
         $('#variantContainer').append(variantHtml);
+        
+        // Initialize select2 for the new variant
+        $(`#variant-new-${variantCount} .select2`).select2({
+            width: '100%'
+        });
+        
+        // Initialize dropzone for this variant
+        initializeVariantDropzone('new-' + variantCount);
     });
+
+    function generateStoreOptions() {
+        let options = '';
+        @foreach($stores as $store)
+            options += '<option value="{{ $store->id }}">{{ $store->name }}</option>';
+        @endforeach
+        return options;
+    }
 
     // Add Discount
     $('#addDiscount').click(function() {
@@ -960,15 +1205,23 @@ $(document).ready(function(){
             formData.append(field.name, field.value);
         });
         
+        // Add removed media and variants to form data
+        removedMainMedia.forEach((mediaId, index) => {
+            formData.append(`removed_main_media[${index}]`, mediaId);
+        });
+        
+        removedVariantMedia.forEach((mediaId, index) => {
+            formData.append(`removed_variant_media[${index}]`, mediaId);
+        });
+        
+        removedVariants.forEach((variantId, index) => {
+            formData.append(`removed_variants[${index}]`, variantId);
+        });
+        
         // Get selected categories from jstree
         const selectedCategories = $('#categoryTree').jstree('get_selected');
         selectedCategories.forEach((categoryId, index) => {
             formData.append(`categories[${index}]`, categoryId);
-        });
-        
-        // Add removed images
-        removedImages.forEach((imageId, index) => {
-            formData.append(`removed_images[${index}]`, imageId);
         });
         
         // Set status based on action button
@@ -1053,63 +1306,19 @@ $(document).ready(function(){
                             input.siblings('.invalid-feedback').text(messages[0]);
                         }
                     });
-                    
-                    // Show validation summary
-                    let errorList = '<ul>';
-                    $.each(response.errors, function(field, messages) {
-                        errorList += '<li>' + field + ': ' + messages[0] + '</li>';
-                    });
-                    errorList += '</ul>';
-                    
-                    swal({
-                        title: "Validation Errors",
-                        text: "Please check the following errors:",
-                        type: "warning",
-                        html: true,
-                        confirmButtonText: "OK"
-                    });
                 }
-            },
-            xhr: function() {
-                var xhr = new window.XMLHttpRequest();
-                xhr.upload.addEventListener("progress", function(evt) {
-                    if (evt.lengthComputable) {
-                        var percentComplete = evt.loaded / evt.total;
-                        console.log('Upload progress: ' + Math.round(percentComplete * 100) + '%');
-                    }
-                }, false);
-                return xhr;
             }
         });
-    });
-
-    // Auto-generate slug from name
-    $('input[name="name"]').on('input', function() {
-        const name = $(this).val();
-        const slug = name.toLowerCase()
-            .replace(/[^a-z0-9\s-]/g, '')
-            .replace(/\s+/g, '-')
-            .replace(/-+/g, '-')
-            .trim('-');
-        $('input[name="slug"]').val(slug);
     });
 });
 
 // Global functions for removing elements
 function removeVariant(id) {
-    const variantRow = $(`#variant-${id}`);
-    const variantId = variantRow.data('variant-id');
-    
-    if (variantId) {
-        // Mark for deletion if it's an existing variant
-        $('<input>').attr({
-            type: 'hidden',
-            name: 'deleted_variants[]',
-            value: variantId
-        }).appendTo('#productForm');
+    $(`#variant-${id}`).remove();
+    // Clean up variant images from global storage
+    if (window.variantImages && window.variantImages[id]) {
+        delete window.variantImages[id];
     }
-    
-    variantRow.remove();
 }
 
 function removeDiscount(id) {
@@ -1124,40 +1333,66 @@ function removeImageRow(index) {
     }
 }
 
-function removeExistingImage(imageId) {
-    // Add to removed images array
-    removedImages.push(imageId);
+// Function to initialize dropzone for variants
+function initializeVariantDropzone(variantId) {
+    const dropzoneId = `#variantDropzone-${variantId}`;
     
-    // Hide the image and mark it for removal
-    const imageDiv = $(`.existing-image[data-image-id="${imageId}"]`);
-    imageDiv.hide();
-    imageDiv.find('input[name*="[keep]"]').val('0');
-    
-    toastr.info('Image marked for removal. Save the form to complete the removal.');
-}
-
-function toggleFeatured(imageId) {
-    const imageDiv = $(`.existing-image[data-image-id="${imageId}"]`);
-    const isFeatured = imageDiv.hasClass('featured');
-    
-    // Remove featured from all images
-    $('.existing-image').removeClass('featured').find('img').css('border-color', '#ddd');
-    $('.existing-image').find('input[name*="[is_featured]"]').val('0');
-    
-    if (!isFeatured) {
-        // Set this image as featured
-        imageDiv.addClass('featured').find('img').css('border-color', '#28a745');
-        imageDiv.find('input[name*="[is_featured]"]').val('1');
-        
-        // Update button text
-        imageDiv.find('button[onclick*="toggleFeatured"]').text('Remove Featured');
-    }
-    
-    // Update all button texts
-    $('.existing-image').each(function() {
-        const button = $(this).find('button[onclick*="toggleFeatured"]');
-        const isFeat = $(this).hasClass('featured');
-        button.text(isFeat ? 'Remove Featured' : 'Set Featured');
+    const variantDropzone = new Dropzone(dropzoneId, {
+        url: "{{ route('admin.products.upload-image') }}",
+        paramName: "file",
+        maxFilesize: 5,
+        acceptedFiles: "image/*",
+        addRemoveLinks: true,
+        headers: {
+            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+        },
+        success: function(file, response) {
+            console.log(`Variant ${variantId} image uploaded:`, response);
+            
+            // Store variant images in a global object
+            if (!window.variantImages) {
+                window.variantImages = {};
+            }
+            if (!window.variantImages[variantId]) {
+                window.variantImages[variantId] = [];
+            }
+            
+            window.variantImages[variantId].push({
+                id: response.id,
+                filename: response.filename,
+                original_name: response.original_name,
+                path: response.path
+            });
+            
+            // Add hidden inputs for new variant images
+            const isExistingVariant = !variantId.toString().startsWith('new-');
+            const inputPrefix = isExistingVariant 
+                ? `existing_variants[${variantId}][new_images]`
+                : `variants[${variantId.replace('new-', '')}][images]`;
+            
+            const imageIndex = window.variantImages[variantId].length - 1;
+            const hiddenInputs = `
+                <input type="hidden" name="${inputPrefix}[${imageIndex}][id]" value="${response.id}">
+                <input type="hidden" name="${inputPrefix}[${imageIndex}][path]" value="${response.path}">
+                <input type="hidden" name="${inputPrefix}[${imageIndex}][name]" value="${response.original_name}">
+                <input type="hidden" name="${inputPrefix}[${imageIndex}][sort_order]" value="${imageIndex}">
+            `;
+            
+            $(`#variant-${variantId}`).append(hiddenInputs);
+        },
+        error: function(file, errorMessage) {
+            console.error(`Variant ${variantId} upload error:`, errorMessage);
+            toastr.error('Failed to upload variant image: ' + (errorMessage.message || errorMessage));
+        },
+        removedfile: function(file) {
+            if (window.variantImages && window.variantImages[variantId]) {
+                const imageIndex = window.variantImages[variantId].findIndex(img => img.filename === file.upload?.filename);
+                if (imageIndex > -1) {
+                    window.variantImages[variantId].splice(imageIndex, 1);
+                }
+            }
+            file.previewElement.remove();
+        }
     });
 }
 </script>

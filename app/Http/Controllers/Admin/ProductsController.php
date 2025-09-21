@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Models\ProductStore;
 use App\Models\ProductCategory;
 use App\Models\ProductMedia;
 use App\Models\ProductVariant;
@@ -26,25 +27,38 @@ class ProductsController extends Controller
                 'products.name',
                 'products.sku',
                 'products.short_description',
-                'products.type',
                 'products.status',
                 'products.created_at',
                 'brands.name as brand_name',
                 'users.first_name as creator_first_name',
-                'users.last_name as creator_last_name'
+                'users.last_name as creator_last_name',
+                'stores.id as store_id',
+                'stores.name as store_name',
+                'product_stores.display_name as store_display_name',
+                'product_stores.short_description as store_short_description',
+                'product_stores.custom_description as store_custom_description',
+                'product_stores.is_active as store_is_active',
+                'product_stores.featured_in_store',
+                'product_stores.sort_order',
             ])
             ->leftJoin('brands', 'products.brand_id', '=', 'brands.id')
             ->leftJoin('users', 'products.created_by', '=', 'users.id')
-            ->whereNull('products.deleted_at')
-            ->orderBy('products.created_at', 'desc');
+            ->leftJoin('product_stores', 'products.id', '=', 'product_stores.product_id')
+            ->leftJoin('stores', 'product_stores.store_id', '=', 'stores.id')
+            ->whereNull('products.deleted_at');
 
         // Apply filters
         $this->applyFilters($query, $request);
 
-        // Paginate with 20 items per page
-        $products = $query->paginate(20);
+        // Ambil jumlah per halaman dari request (default 10)
+        $perPage = $request->input('per_page', 10);
 
-        // Get brands for filter dropdown
+        // Paginate dengan query string agar filter ikut
+        $products = $query->orderBy('products.created_at', 'desc')
+            ->paginate($perPage)
+            ->appends($request->query());
+
+        // Brands untuk dropdown filter
         $brands = DB::table('brands')
             ->select('id', 'name')
             ->where('status', 'active')
@@ -52,18 +66,28 @@ class ProductsController extends Controller
             ->orderBy('name')
             ->get();
 
-        return view('admin.products.index', compact('products', 'brands'));
+        // Stores untuk dropdown filter
+        $stores = DB::table('stores')
+            ->select('id', 'name')
+            ->where('status', 'active')
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get();
+
+        return view('admin.products.index', compact('products', 'brands', 'stores'));
     }
 
-    private function applyFilters($query, $request)
+    private function applyFilters($query, Request $request)
     {
         // Search filter
         if ($request->filled('search')) {
             $search = '%' . $request->search . '%';
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('products.name', 'like', $search)
-                  ->orWhere('products.sku', 'like', $search)
-                  ->orWhere('products.short_description', 'like', $search);
+                    ->orWhere('products.sku', 'like', $search)
+                    ->orWhere('products.short_description', 'like', $search)
+                    ->orWhere('product_stores.display_name', 'like', $search)
+                    ->orWhere('stores.name', 'like', $search);
             });
         }
 
@@ -72,9 +96,9 @@ class ProductsController extends Controller
             $query->where('products.status', $request->status);
         }
 
-        // Type filter
-        if ($request->filled('type')) {
-            $query->where('products.type', 'like', '%' . $request->type . '%');
+        // Store filter
+        if ($request->filled('store_id')) {
+            $query->where('stores.id', $request->store_id);
         }
 
         // Brand filter
@@ -82,6 +106,7 @@ class ProductsController extends Controller
             $query->where('products.brand_id', $request->brand_id);
         }
     }
+
 
     public function show($id)
     {
@@ -145,6 +170,7 @@ class ProductsController extends Controller
             ->orderBy('sort_order')
             ->orderBy('is_featured', 'desc')
             ->get();
+
         // Get product stores
         $productStores = DB::table('product_stores as ps')
             ->join('stores as s', 'ps.store_id', '=', 's.id')
@@ -319,8 +345,20 @@ class ProductsController extends Controller
                 'meta_description' => $request->meta_description,
                 'meta_keywords' => $request->meta_keywords,
                 'created_by' => $user_id
-     
             ]);
+
+           if ($request->has('stores') && is_array($request->stores)) {
+                foreach ($request->stores as $storeUuid => $storeData) {
+                    // cek kalau ada key store_id dan tidak kosong
+                    if (!empty($storeData['store_id'])) {
+                        ProductStore::create([
+                            'product_id' => $product->id,
+                            'store_id'   => $storeData['store_id'],
+                            'is_active'  => !empty($storeData['selected']) ? true : false,
+                        ]);
+                    }
+                }
+            }
 
             Log::info('Product created:', ['product_id' => $product->id]);
 
@@ -602,7 +640,7 @@ class ProductsController extends Controller
     public function uploadImage(Request $request)
     {
         $request->validate([
-            'file' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120'
+            'file' => 'required|image|mimes:webp,jpeg,png,jpg,gif|max:5120'
         ]);
 
         try {
@@ -950,152 +988,233 @@ class ProductsController extends Controller
                 ->with('error', 'Product not found!');
         }
 
-        // Get product categories
+        // Product categories
         $categories = DB::table('product_category_relationships as pcr')
             ->join('product_categories as pc', 'pcr.product_category_id', '=', 'pc.id')
             ->where('pcr.product_id', $id)
             ->select('pc.id', 'pc.name', 'pc.slug', 'pcr.is_primary')
             ->get();
 
-        // Get product variants
+        // Variants
         $variants = DB::table('product_variants')
             ->where('product_id', $id)
             ->whereNull('deleted_at')
             ->orderBy('sort_order')
             ->get();
 
-        // Get variant attributes for each variant
-        foreach ($variants as $variant) {
-            $variant->attributes = DB::table('variant_attributes')
-                ->where('variant_id', $variant->id)
-                ->get();
+        $variantIds = $variants->pluck('id');
 
-            // Get variant store pricing
-            $variant->stores = DB::table('variant_stores as vs')
-                ->join('stores as s', 'vs.store_id', '=', 's.id')
-                ->where('vs.variant_id', $variant->id)
-                ->select('s.name as store_name', 'vs.*')
-                ->get();
+        // Variant attributes (1 query)
+        $variantAttributes = DB::table('variant_attributes')
+            ->whereIn('variant_id', $variantIds)
+            ->get()
+            ->groupBy('variant_id');
+
+        // Variant store pricing (1 query)
+        $variantStores = DB::table('variant_stores as vs')
+            ->join('stores as s', 'vs.store_id', '=', 's.id')
+            ->whereIn('vs.variant_id', $variantIds)
+            ->select('s.name as store_name', 'vs.*')
+            ->get()
+            ->groupBy('variant_id');
+
+        // Variant media (1 query)
+        $variantMedia = DB::table('product_media')
+            ->whereIn('product_variant_id', $variantIds)
+            ->orderBy('sort_order')
+            ->orderBy('is_primary', 'desc')
+            ->orderBy('is_featured', 'desc')
+            ->get()
+            ->groupBy('product_variant_id');
+
+        // Mapping data ke setiap variant
+        foreach ($variants as $variant) {
+            $variant->attributes = $variantAttributes->get($variant->id, collect());
+            $variant->stores     = $variantStores->get($variant->id, collect());
+            $variant->media      = $variantMedia->get($variant->id, collect());
         }
 
-        // Get product media
+
+        // All stores
+        $stores = DB::table('stores')
+            ->orderBy('name')
+            ->get();
+
+        // Product media (umum, tanpa variant)
         $media = DB::table('product_media')
             ->where('product_id', $id)
+            ->whereNull('product_variant_id')
             ->orderBy('sort_order')
             ->orderBy('is_featured', 'desc')
             ->get();
 
-        // Get product stores
+        // Cover product (1 media featured)
+        $coverProduct = DB::table('product_media')
+            ->where('product_id', $id)
+            ->whereNull('product_variant_id')
+            ->where('is_featured', 1)
+            ->orderBy('sort_order')
+            ->orderBy('is_featured', 'desc')
+            ->get();
+
+
+        // Product stores
         $productStores = DB::table('product_stores as ps')
             ->join('stores as s', 'ps.store_id', '=', 's.id')
             ->where('ps.product_id', $id)
             ->select('s.name as store_name', 'ps.*')
             ->get();
 
-        // Get SEO data
+        // SEO data
         $seoData = DB::table('product_seo')
             ->where('product_id', $id)
             ->get()
             ->keyBy('store_id');
 
-        // Get tags
+        // Tags
         $tags = DB::table('product_tags as pt')
             ->join('tags as t', 'pt.tag_id', '=', 't.id')
             ->where('pt.product_id', $id)
             ->select('t.id', 't.name', 't.slug')
             ->get();
 
-        $brands = DB::table('brands')
-            ->get();
+        // Brands
+        $brands = DB::table('brands')->get();
 
+        // Category tree
         $categoryTree = $this->buildCategoryTree();
-
-        return view('admin.products.edit', compact('product', 'categoryTree', 'brands', 'categories', 'variants', 'media', 'productStores', 'seoData', 'tags'));
+   
+        return view('admin.products.edit', compact(
+            'coverProduct',
+            'variants',
+            'stores',
+            'product',
+            'categoryTree',
+            'brands',
+            'categories',
+            'media',
+            'productStores',
+            'seoData',
+            'tags'
+        ));
     }
+
 
     public function update(Request $request, $id)
     {
-        $product = DB::table('products')
-            ->where('id', $id)
-            ->whereNull('deleted_at')
-            ->first();
-
-        if (!$product) {
-            return redirect()->route('admin.products.index')
-                ->with('error', 'Product not found!');
-        }
-
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'price' => 'required|numeric|min:0',
-            'status' => 'required|in:draft,published,archived',
-            'short_description' => 'nullable|string|max:255',
-            'description' => 'nullable|string',
-            'brand_id' => 'nullable|exists:brands,id',
-            'type' => 'nullable|string|max:100',
-            'barcode' => 'nullable|string|max:100',
-            'model' => 'nullable|string|max:100',
-            'minimum_quantity' => 'nullable|integer|min:1',
-            'sort_order' => 'nullable|integer',
-            'track_stock' => 'nullable|boolean',
-            'is_featured' => 'nullable|boolean',
-            'sale_price' => 'nullable|numeric|min:0',
-            'cost_price' => 'nullable|numeric|min:0',
-            'weight' => 'nullable|numeric|min:0',
-            'length' => 'nullable|numeric|min:0',
-            'width' => 'nullable|numeric|min:0',
-            'height' => 'nullable|numeric|min:0',
-            'tax_status' => 'nullable|in:taxable,none',
-            'meta_title' => 'nullable|string|max:60',
-            'meta_description' => 'nullable|string|max:160',
-            'meta_keywords' => 'nullable|string',
-            'slug' => 'nullable|string|unique:products,slug',
-            
-            // Validation for arrays
-            'variants' => 'nullable|array',
-            'variants.*.type' => 'nullable|string|max:100',
-            'variants.*.color' => 'nullable|string|max:100',
-            'variants.*.value' => 'nullable|string|max:100',
-            'variants.*.sku' => 'nullable|string',
-            'variants.*.price' => 'nullable|numeric|min:0',
-            'variants.*.stock_quantity' => 'nullable|integer|min:0',
-            
-            'categories' => 'nullable|array',
-            'categories.*' => 'exists:product_categories,id',
-            
-            'images' => 'nullable|array',
-            'images.*.id' => 'nullable',
-            'images.*.name' => 'nullable|string',
-            'images.*.alt_text' => 'nullable|string',
-            'images.*.sort_order' => 'nullable|integer',
-            
-            'discounts' => 'nullable|array',
-            'discounts.*.quantity' => 'nullable|integer|min:1',
-            'discounts.*.type' => 'nullable|in:percentage,fixed',
-            'discounts.*.value' => 'nullable|numeric|min:0',
-            'discounts.*.start_date' => 'nullable|date',
-            'discounts.*.end_date' => 'nullable|date|after_or_equal:discounts.*.start_date',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-                'debug_data' => [
-                    'request_data' => $request->all(),
-                    'validation_rules' => $validator->getRules()
-                ]
-            ], 422);
-        }
-
-        DB::beginTransaction();
+        $user = Auth::user();
+        $user_id = (string) $user->id;
         
         try {
-            $data = [
+            // Find the product
+            $product = Product::findOrFail($id);
+            
+            // Log all incoming data for debugging
+            Log::info('Product Update Request Data:', [
+                'product_id' => $id,
+                'all_data' => $request->all(),
+                'files' => $request->allFiles(),
+                'existing_variants' => $request->input('existing_variants', []),
+                'new_variants' => $request->input('variants', []),
+                'categories' => $request->input('categories', []),
+                'images' => $request->input('images', []),
+                'removed_items' => [
+                    'removed_main_media' => $request->input('removed_main_media', []),
+                    'removed_variant_media' => $request->input('removed_variant_media', []),
+                    'removed_variants' => $request->input('removed_variants', [])
+                ]
+            ]);
+
+            // Enhanced validation
+            $validator = Validator::make($request->all(), [
+                'name' => 'required|string|max:255',
+                'sku' => 'required|string|unique:products,sku,' . $id,
+                'price' => 'required|numeric|min:0',
+                'status' => 'required|in:draft,published,archived',
+                'short_description' => 'nullable|string|max:255',
+                'description' => 'nullable|string',
+                'brand_id' => 'nullable|exists:brands,id',
+                'type' => 'nullable|string|max:100',
+                'barcode' => 'nullable|string|max:100',
+                'model' => 'nullable|string|max:100',
+                'minimum_quantity' => 'nullable|integer|min:1',
+                'sort_order' => 'nullable|integer',
+                'track_stock' => 'nullable|boolean',
+                'is_featured' => 'nullable|boolean',
+                'sale_price' => 'nullable|numeric|min:0',
+                'cost_price' => 'nullable|numeric|min:0',
+                'weight' => 'nullable|numeric|min:0',
+                'length' => 'nullable|numeric|min:0',
+                'width' => 'nullable|numeric|min:0',
+                'height' => 'nullable|numeric|min:0',
+                'tax_status' => 'nullable|in:taxable,none',
+                'meta_title' => 'nullable|string|max:60',
+                'meta_description' => 'nullable|string|max:160',
+                'meta_keywords' => 'nullable|string',
+                'slug' => 'nullable|string|unique:products,slug,' . $id,
+                
+                // Existing variants validation
+                'existing_variants' => 'nullable|array',
+                'existing_variants.*.id' => 'required|exists:product_variants,id',
+                'existing_variants.*.type' => 'nullable|string|max:100',
+                'existing_variants.*.color' => 'nullable|string|max:100',
+                'existing_variants.*.value' => 'nullable|string|max:100',
+                'existing_variants.*.sku' => 'nullable|string',
+                'existing_variants.*.price' => 'nullable|numeric|min:0',
+                'existing_variants.*.stock_quantity' => 'nullable|integer|min:0',
+                'existing_variants.*.new_images' => 'nullable|array',
+                'existing_variants.*.keep_media' => 'nullable|array',
+                
+                // New variants validation
+                'variants' => 'nullable|array',
+                'variants.*.type' => 'nullable|string|max:100',
+                'variants.*.color' => 'nullable|string|max:100',
+                'variants.*.value' => 'nullable|string|max:100',
+                'variants.*.sku' => 'nullable|string',
+                'variants.*.price' => 'nullable|numeric|min:0',
+                'variants.*.stock_quantity' => 'nullable|integer|min:0',
+                'variants.*.images' => 'nullable|array',
+                
+                'categories' => 'nullable|array',
+                'categories.*' => 'exists:product_categories,id',
+                
+                'images' => 'nullable|array',
+                'removed_main_media' => 'nullable|array',
+                'removed_variant_media' => 'nullable|array',
+                'removed_variants' => 'nullable|array',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors(),
+                    'debug_data' => [
+                        'request_data' => $request->all(),
+                        'validation_rules' => $validator->getRules()
+                    ]
+                ], 422);
+            }
+
+            DB::beginTransaction();
+
+            // Generate slug if not provided or changed
+            $slug = $request->slug ?: Str::slug($request->name);
+            if ($slug !== $product->slug) {
+                $originalSlug = $slug;
+                $counter = 1;
+                
+                while (DB::table('products')->where('slug', $slug)->where('id', '!=', $id)->exists()) {
+                    $slug = $originalSlug . '-' . $counter;
+                    $counter++;
+                }
+            }
+
+            // Update main product
+            $product->update([
                 'name' => $request->name,
                 'sku' => $request->sku,
-                'slug' => $request->slug,
+                'slug' => $slug,
                 'short_description' => $request->short_description,
                 'description' => $request->description,
                 'price' => $request->price,
@@ -1117,128 +1236,382 @@ class ProductsController extends Controller
                 'meta_title' => $request->meta_title,
                 'meta_description' => $request->meta_description,
                 'meta_keywords' => $request->meta_keywords,
-                'is_featured' => $request->boolean('is_featured'),
                 'updated_at' => now(),
-                'created_by' => auth()->id(),
-            ];
+            ]);
 
-            DB::table('products')
-                ->where('id', $id)
-                ->update($data);
+            Log::info('Product updated:', ['product_id' => $product->id]);
 
-            // Update categories
-            DB::table('product_category_relationships')
-                ->where('product_id', $id)
-                ->delete();
-
-            if ($request->has('categories') && is_array($request->categories)) {
-                foreach ($request->categories as $categoryId) {
-                    DB::table('product_category_relationships')->insert([
-                        'id' => Str::uuid(),
-                        'product_id' => $id,
-                        'category_id' => $categoryId,
-                        'is_primary' => $categoryId === $request->primary_category,
-                        'created_at' => now(),
-                    ]);
-                }
-            }
-
-            // Update store relationships
-            DB::table('product_stores')
-                ->where('product_id', $id)
-                ->delete();
-
+            // Handle Store Assignments
             if ($request->has('stores') && is_array($request->stores)) {
-                foreach ($request->stores as $storeId) {
-                    DB::table('product_stores')->insert([
-                        'id' => Str::uuid(),
-                        'product_id' => $id,
-                        'store_id' => $storeId,
-                        'is_active' => true,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
+                // Remove all existing store assignments
+                ProductStore::where('product_id', $product->id)->delete();
+                
+                // Add new store assignments
+                foreach ($request->stores as $storeUuid => $storeData) {
+                    if (!empty($storeData['store_id'])) {
+                        ProductStore::create([
+                            'product_id' => $product->id,
+                            'store_id'   => $storeData['store_id'],
+                            'is_active'  => !empty($storeData['selected']) ? true : false,
+                        ]);
+                    }
                 }
             }
 
-            // Update tags
-            DB::table('product_tags')
-                ->where('product_id', $id)
-                ->delete();
-
-            if ($request->has('tags') && is_array($request->tags)) {
-                foreach ($request->tags as $tagId) {
-                    DB::table('product_tags')->insert([
-                        'id' => Str::uuid(),
-                        'product_id' => $id,
-                        'tag_id' => $tagId,
-                        'created_at' => now(),
-                    ]);
-                }
-            }
-
-            // Handle new images
-            if ($request->hasFile('new_images')) {
-                $maxSortOrder = DB::table('product_media')
-                    ->where('product_id', $id)
-                    ->max('sort_order') ?? -1;
-
-                foreach ($request->file('new_images') as $index => $image) {
-                    $path = $image->store('products/images', 'public');
-                    
-                    DB::table('product_media')->insert([
-                        'id' => Str::uuid(),
-                        'product_id' => $id,
-                        'file_path' => $path,
-                        'file_name' => pathinfo($path, PATHINFO_BASENAME),
-                        'original_name' => $image->getClientOriginalName(),
-                        'file_type' => $image->getClientOriginalExtension(),
-                        'file_size' => $image->getSize(),
-                        'mime_type' => $image->getMimeType(),
-                        'media_type' => 'image',
-                        'sort_order' => $maxSortOrder + $index + 1,
-                        'is_featured' => $request->boolean('is_featured'),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                }
-            }
-
-            // Update SEO data
-            if ($request->has('seo') && is_array($request->seo)) {
-                DB::table('product_seo')
-                    ->where('product_id', $id)
+            // Handle Categories
+            if ($request->has('categories')) {
+                // Remove existing category relationships
+                DB::table('product_category_relationships')
+                    ->where('product_id', $product->id)
                     ->delete();
+                
+                // Add new category relationships
+                if (is_array($request->categories) && !empty($request->categories)) {
+                    $categoriesData = [];
+                    foreach (array_unique($request->categories) as $categoryId) {
+                        $categoriesData[] = [
+                            'id' => (string) Str::uuid(),
+                            'product_id' => $product->id,
+                            'product_category_id' => $categoryId,
+                            'is_primary' => 0,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ];
+                    }
+                    
+                    if (!empty($categoriesData)) {
+                        DB::table('product_category_relationships')->insert($categoriesData);
+                    }
+                }
+                
+                Log::info('Categories updated:', ['categories' => $request->categories ?? []]);
+            }
 
-                foreach ($request->seo as $storeId => $seoData) {
-                    if (empty(array_filter($seoData))) continue;
+            // Handle removal of main media
+            if ($request->has('removed_main_media') && is_array($request->removed_main_media)) {
+                foreach ($request->removed_main_media as $mediaId) {
+                    $media = DB::table('product_media')->where('id', $mediaId)->first();
+                    if ($media) {
+                        // Delete file from storage
+                        if ($media->image_path && Storage::disk('public')->exists(str_replace('/storage/', '', $media->image_path))) {
+                            Storage::disk('public')->delete(str_replace('/storage/', '', $media->image_path));
+                        }
+                        // Delete from database
+                        DB::table('product_media')->where('id', $mediaId)->delete();
+                    }
+                }
+                Log::info('Removed main media:', ['count' => count($request->removed_main_media)]);
+            }
 
-                    DB::table('product_seo')->insert([
-                        'id' => Str::uuid(),
-                        'product_id' => $id,
-                        'store_id' => $storeId === 'global' ? null : $storeId,
-                        'meta_title' => $seoData['meta_title'] ?? null,
-                        'meta_description' => $seoData['meta_description'] ?? null,
-                        'meta_keywords' => $seoData['meta_keywords'] ?? null,
-                        'og_title' => $seoData['og_title'] ?? null,
-                        'og_description' => $seoData['og_description'] ?? null,
-                        'og_image' => $seoData['og_image'] ?? null,
-                        'canonical_url' => $seoData['canonical_url'] ?? null,
-                        'robots' => $seoData['robots'] ?? 'index,follow',
+            // Handle removal of variant media
+            if ($request->has('removed_variant_media') && is_array($request->removed_variant_media)) {
+                foreach ($request->removed_variant_media as $mediaId) {
+                    $media = DB::table('product_media')->where('id', $mediaId)->first();
+                    if ($media) {
+                        // Delete file from storage
+                        if ($media->image_path && Storage::disk('public')->exists(str_replace('/storage/', '', $media->image_path))) {
+                            Storage::disk('public')->delete(str_replace('/storage/', '', $media->image_path));
+                        }
+                        // Delete from database
+                        DB::table('product_media')->where('id', $mediaId)->delete();
+                    }
+                }
+                Log::info('Removed variant media:', ['count' => count($request->removed_variant_media)]);
+            }
+
+            // Handle removal of variants
+            if ($request->has('removed_variants') && is_array($request->removed_variants)) {
+                foreach ($request->removed_variants as $variantId) {
+                    // Delete variant media first
+                    $variantMedia = DB::table('product_media')
+                        ->where('product_variant_id', $variantId)
+                        ->get();
+                    
+                    foreach ($variantMedia as $media) {
+                        if ($media->image_path && Storage::disk('public')->exists(str_replace('/storage/', '', $media->image_path))) {
+                            Storage::disk('public')->delete(str_replace('/storage/', '', $media->image_path));
+                        }
+                    }
+                    
+                    // Delete variant media records
+                    DB::table('product_media')->where('product_variant_id', $variantId)->delete();
+                    
+                    // Delete variant
+                    DB::table('product_variants')->where('id', $variantId)->delete();
+                }
+                Log::info('Removed variants:', ['count' => count($request->removed_variants)]);
+            }
+
+            // Handle new main product images
+            if ($request->has('images') && is_array($request->images)) {
+                $primaryImageIndex = $request->input('primary_image', 0);
+                
+                foreach ($request->images as $index => $imageData) {
+                    if (!empty($imageData['path'])) {
+                        $productMediaId = (string) Str::uuid();
+                        
+                        // Extract file info from path
+                        $filePath = $imageData['path'];
+                        $fileName = $imageData['name'] ?? basename($filePath);
+                        $fileSize = 0;
+                        $mimeType = 'image/jpeg';
+                        
+                        // Try to get file info if it exists
+                        if (Storage::disk('public')->exists(str_replace('/storage/', '', $filePath))) {
+                            $fileSize = Storage::disk('public')->size(str_replace('/storage/', '', $filePath));
+                            $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
+                        }
+                        
+                        DB::table('product_media')->insert([
+                            'id' => $productMediaId,
+                            'product_id' => $product->id,
+                            'product_variant_id' => null,
+                            'image_path' => $filePath,
+                            'original_name' => $fileName,
+                            'file_name' => basename($filePath),
+                            'file_type' => pathinfo($filePath, PATHINFO_EXTENSION),
+                            'file_size' => $fileSize,
+                            'mime_type' => $mimeType,
+                            'media_type' => 'image',
+                            'sort_order' => $imageData['sort_order'] ?? $index,
+                            'is_primary' => ($index == $primaryImageIndex) ? 1 : 0,
+                            'is_featured' => $product->is_featured,
+                            'is_temporary' => 0,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
+                
+                Log::info('New main product images added:', ['images_count' => count($request->images)]);
+            }
+
+            // Handle existing variants updates
+            if ($request->has('existing_variants') && is_array($request->existing_variants)) {
+                foreach ($request->existing_variants as $variantId => $variantData) {
+                    // Update existing variant
+                    DB::table('product_variants')
+                        ->where('id', $variantId)
+                        ->update([
+                            'store_id' => $variantData['store_id'] ?? null,
+                            'type' => $variantData['type'] ?? null,
+                            'attribute_name' => $variantData['color'] ?? null,
+                            'attribute_value' => $variantData['value'] ?? null,
+                            'sku' => $variantData['sku'] ?? null,
+                            'price' => $variantData['price'] ?? $product->price,
+                            'sale_price' => $variantData['sale_price'] ?? null,
+                            'stock_quantity' => $variantData['stock_quantity'] ?? 0,
+                            'updated_at' => now(),
+                        ]);
+
+                    // Handle new images for existing variants
+                    if (!empty($variantData['new_images']) && is_array($variantData['new_images'])) {
+                        foreach ($variantData['new_images'] as $imageIndex => $imageData) {
+                            if (!empty($imageData['path'])) {
+                                $productMediaId = (string) Str::uuid();
+                                
+                                $filePath = $imageData['path'];
+                                $fileName = $imageData['name'] ?? basename($filePath);
+                                $fileSize = 0;
+                                $mimeType = 'image/jpeg';
+                                
+                                if (Storage::disk('public')->exists(str_replace('/storage/', '', $filePath))) {
+                                    $fileSize = Storage::disk('public')->size(str_replace('/storage/', '', $filePath));
+                                    $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
+                                }
+                                
+                                DB::table('product_media')->insert([
+                                    'id' => $productMediaId,
+                                    'product_id' => $product->id,
+                                    'product_variant_id' => $variantId,
+                                    'image_path' => $filePath,
+                                    'original_name' => $fileName,
+                                    'file_name' => basename($filePath),
+                                    'file_type' => pathinfo($filePath, PATHINFO_EXTENSION),
+                                    'file_size' => $fileSize,
+                                    'mime_type' => $mimeType,
+                                    'media_type' => 'image',
+                                    'sort_order' => $imageData['sort_order'] ?? $imageIndex,
+                                    'is_primary' => $imageIndex === 0 ? 1 : 0,
+                                    'is_featured' => 0,
+                                    'is_temporary' => 0,
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                ]);
+                            }
+                        }
+                    }
+
+                    Log::info('Existing variant updated:', [
+                        'variant_id' => $variantId,
+                        'new_images_count' => count($variantData['new_images'] ?? [])
+                    ]);
+                }
+                
+                Log::info('All existing variants updated:', ['variants_count' => count($request->existing_variants)]);
+            }
+
+            // Handle new variants
+            if ($request->has('variants') && is_array($request->variants)) {
+                foreach ($request->variants as $variantIndex => $variantData) {
+                    $variantId = (string) Str::uuid();
+                    $productMediaId = null;
+
+                    // Handle variant images
+                    if (!empty($variantData['images']) && is_array($variantData['images'])) {
+                        $images = array_values($variantData['images']);
+
+                        // First image
+                        $firstImage = $images[0] ?? null;
+                        if ($firstImage && !empty($firstImage['path'])) {
+                            $productMediaId = (string) Str::uuid();
+
+                            $filePath = $firstImage['path'];
+                            $fileName = $firstImage['name'] ?? basename($filePath);
+                            $fileSize = 0;
+                            $mimeType = 'image/jpeg';
+
+                            if (Storage::disk('public')->exists(str_replace('/storage/', '', $filePath))) {
+                                $fileSize = Storage::disk('public')->size(str_replace('/storage/', '', $filePath));
+                                $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
+                            }
+
+                            DB::table('product_media')->insert([
+                                'id' => $productMediaId,
+                                'product_id' => $product->id,
+                                'product_variant_id' => $variantId,
+                                'image_path' => $filePath,
+                                'original_name' => $fileName,
+                                'file_name' => basename($filePath),
+                                'file_type' => pathinfo($filePath, PATHINFO_EXTENSION),
+                                'file_size' => $fileSize,
+                                'mime_type' => $mimeType,
+                                'media_type' => 'image',
+                                'sort_order' => $firstImage['sort_order'] ?? 0,
+                                'is_primary' => 1,
+                                'is_featured' => 0,
+                                'is_temporary' => 0,
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+                        }
+
+                        // Additional images
+                        foreach (array_slice($images, 1) as $imageIndex => $imageData) {
+                            if (!empty($imageData['path'])) {
+                                $additionalMediaId = (string) Str::uuid();
+
+                                $filePath = $imageData['path'];
+                                $fileName = $imageData['name'] ?? basename($filePath);
+                                $fileSize = 0;
+                                $mimeType = 'image/jpeg';
+
+                                if (Storage::disk('public')->exists(str_replace('/storage/', '', $filePath))) {
+                                    $fileSize = Storage::disk('public')->size(str_replace('/storage/', '', $filePath));
+                                    $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
+                                }
+
+                                DB::table('product_media')->insert([
+                                    'id' => $additionalMediaId,
+                                    'product_id' => $product->id,
+                                    'product_variant_id' => $variantId,
+                                    'image_path' => $filePath,
+                                    'original_name' => $fileName,
+                                    'file_name' => basename($filePath),
+                                    'file_type' => pathinfo($filePath, PATHINFO_EXTENSION),
+                                    'file_size' => $fileSize,
+                                    'mime_type' => $mimeType,
+                                    'media_type' => 'image',
+                                    'sort_order' => $imageData['sort_order'] ?? ($imageIndex + 1),
+                                    'is_primary' => 0,
+                                    'is_featured' => 0,
+                                    'is_temporary' => 0,
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                ]);
+                            }
+                        }
+                    }
+
+                    // Insert new variant
+                    DB::table('product_variants')->insert([
+                        'id' => $variantId,
+                        'product_id' => $product->id,
+                        'product_media_id' => $productMediaId,
+                        'store_id' => $variantData['store_id'] ?? null,
+                        'type' => $variantData['type'] ?? null,
+                        'attribute_name' => $variantData['color'] ?? null,
+                        'attribute_value' => $variantData['value'] ?? null,
+                        'sku' => $variantData['sku'] ?? null,
+                        'price' => $variantData['price'] ?? $product->price,
+                        'sale_price' => $variantData['sale_price'] ?? null,
+                        'stock_quantity' => $variantData['stock_quantity'] ?? 0,
+                        'status' => 'active',
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
+
+                    Log::info('New variant created:', [
+                        'variant_id' => $variantId,
+                        'variant_index' => $variantIndex,
+                        'product_media_id' => $productMediaId,
+                        'images_count' => count($variantData['images'] ?? [])
+                    ]);
                 }
+
+                Log::info('All new variants created:', ['variants_count' => count($request->variants)]);
             }
 
             DB::commit();
 
-            return redirect()->route('admin.products.show', $id)
-                ->with('success', 'Product updated successfully!');
+            return response()->json([
+                'success' => true,
+                'message' => 'Product updated successfully!',
+                'data' => [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'redirect_url' => route('admin.products.show', $product->id)
+                ],
+                'debug_info' => [
+                    'processed_data' => [
+                        'updated_product' => true,
+                        'categories_count' => count($request->input('categories', [])),
+                        'existing_variants_count' => count($request->input('existing_variants', [])),
+                        'new_variants_count' => count($request->input('variants', [])),
+                        'new_main_images_count' => count($request->input('images', [])),
+                        'removed_main_media_count' => count($request->input('removed_main_media', [])),
+                        'removed_variant_media_count' => count($request->input('removed_variant_media', [])),
+                        'removed_variants_count' => count($request->input('removed_variants', []))
+                    ]
+                ]
+            ]);
 
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             DB::rollback();
-            return back()->withInput()->with('error', 'Failed to update product: ' . $e->getMessage());
+            
+            Log::error('Product update failed:', [
+                'product_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update product: ' . $e->getMessage(),
+                'debug_info' => [
+                    'error_details' => $e->getMessage(),
+                    'product_id' => $id,
+                    'request_summary' => [
+                        'name' => $request->input('name'),
+                        'sku' => $request->input('sku'),
+                        'existing_variants_count' => count($request->input('existing_variants', [])),
+                        'new_variants_count' => count($request->input('variants', [])),
+                        'categories_count' => count($request->input('categories', [])),
+                        'new_main_images_count' => count($request->input('images', [])),
+                    ]
+                ]
+            ], 500);
         }
     }
 
@@ -1272,61 +1645,61 @@ class ProductsController extends Controller
         return response()->json(['success' => 'Product deleted successfully!']);
     }
 
-    public function uploadImages(Request $request, $id)
-    {
-        $request->validate([
-            'images' => 'required|array',
-            'images.*' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
-        ]);
+    // public function uploadImages(Request $request, $id)
+    // {
+    //     $request->validate([
+    //         'images' => 'required|array',
+    //         'images.*' => 'required|image|mimes:webp,jpeg,png,jpg,gif|max:2048',
+    //     ]);
 
-        $product = DB::table('products')
-            ->where('id', $id)
-            ->whereNull('deleted_at')
-            ->first();
+    //     $product = DB::table('products')
+    //         ->where('id', $id)
+    //         ->whereNull('deleted_at')
+    //         ->first();
 
-        if (!$product) {
-            return response()->json(['error' => 'Product not found!'], 404);
-        }
+    //     if (!$product) {
+    //         return response()->json(['error' => 'Product not found!'], 404);
+    //     }
 
-        $uploadedFiles = [];
-        $maxSortOrder = DB::table('product_media')
-            ->where('product_id', $id)
-            ->max('sort_order') ?? -1;
+    //     $uploadedFiles = [];
+    //     $maxSortOrder = DB::table('product_media')
+    //         ->where('product_id', $id)
+    //         ->max('sort_order') ?? -1;
 
-        foreach ($request->file('images') as $index => $image) {
-            $path = $image->store('products/images', 'public');
+    //     foreach ($request->file('images') as $index => $image) {
+    //         $path = $image->store('products/images', 'public');
             
-            $mediaId = Str::uuid();
+    //         $mediaId = Str::uuid();
             
-            DB::table('product_media')->insert([
-                'id' => $mediaId,
-                'product_id' => $id,
-                'file_path' => $path,
-                'file_name' => pathinfo($path, PATHINFO_BASENAME),
-                'original_name' => $image->getClientOriginalName(),
-                'file_type' => $image->getClientOriginalExtension(),
-                'file_size' => $image->getSize(),
-                'mime_type' => $image->getMimeType(),
-                'media_type' => 'image',
-                'sort_order' => $maxSortOrder + $index + 1,
-                'is_featured' => false,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+    //         DB::table('product_media')->insert([
+    //             'id' => $mediaId,
+    //             'product_id' => $id,
+    //             'file_path' => $path,
+    //             'file_name' => pathinfo($path, PATHINFO_BASENAME),
+    //             'original_name' => $image->getClientOriginalName(),
+    //             'file_type' => $image->getClientOriginalExtension(),
+    //             'file_size' => $image->getSize(),
+    //             'mime_type' => $image->getMimeType(),
+    //             'media_type' => 'image',
+    //             'sort_order' => $maxSortOrder + $index + 1,
+    //             'is_featured' => false,
+    //             'created_at' => now(),
+    //             'updated_at' => now(),
+    //         ]);
 
-            $uploadedFiles[] = [
-                'id' => $mediaId,
-                'url' => Storage::url($path),
-                'original_name' => $image->getClientOriginalName(),
-                'sort_order' => $maxSortOrder + $index + 1,
-            ];
-        }
+    //         $uploadedFiles[] = [
+    //             'id' => $mediaId,
+    //             'url' => Storage::url($path),
+    //             'original_name' => $image->getClientOriginalName(),
+    //             'sort_order' => $maxSortOrder + $index + 1,
+    //         ];
+    //     }
 
-        return response()->json([
-            'success' => 'Images uploaded successfully!',
-            'files' => $uploadedFiles
-        ]);
-    }
+    //     return response()->json([
+    //         'success' => 'Images uploaded successfully!',
+    //         'files' => $uploadedFiles
+    //     ]);
+    // }
 
     public function deleteImage($productId, $mediaId)
     {

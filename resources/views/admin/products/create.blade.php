@@ -99,9 +99,9 @@
             <div class="col-md-12">
                 <div class="tabs-container">
                     <ul class="nav nav-tabs">
-                        <li><a class="nav-link active" data-toggle="tab" href="#tab-basic"> Basic Info</a></li>
+                        <li><a class="nav-link active" data-toggle="tab" href="#tab-stores"> Store Assignment</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-basic"> Basic Info</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-details"> Details</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-stores"> Store Assignment</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-variants"> Variants</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-pricing"> Pricing & Discounts</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-images"> Images</a></li>
@@ -111,8 +111,41 @@
                     </ul>
                     
                     <div class="tab-content">
+                            {{-- Store Assignment Tab --}}
+                        <div id="tab-stores" class="tab-pane active">
+                            <div class="panel-body">
+                                <div class="form-group">
+                                    <label class="required-field">Select Stores</label>
+                                    <div class="form-help mb-3">Select the stores where this product will be available</div>
+                                    
+                                    @foreach($stores as $store)
+                                        <div class="store-section">
+                                            <div class="form-check mb-3">
+                                                <input class="form-check-input store-checkbox" type="checkbox" 
+                                                       name="stores[{{ $store->id }}][selected]" 
+                                                       value="1" 
+                                                       id="store-{{ $store->id }}"
+                                                       data-store-id="{{ $store->id }}">
+                                                <label class="form-check-label" for="store-{{ $store->id }}">
+                                                    <strong>{{ $store->name }}</strong>
+                                                    @if($store->description)
+                                                        <br><small class="text-muted">{{ $store->description }}</small>
+                                                    @endif
+                                                </label>
+                                            </div>
+                                            
+                                            <div class="store-details" id="store-details-{{ $store->id }}" style="display: none;">
+                                                <input type="hidden" name="stores[{{ $store->id }}][store_id]" value="{{ $store->id }}">
+                                                
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        </div>
+
                         {{-- Basic Info Tab --}}
-                        <div id="tab-basic" class="tab-pane active">
+                        <div id="tab-basic" class="tab-pane">
                             <div class="panel-body">
                                 <fieldset>
                                     <div class="form-group row">
@@ -248,104 +281,7 @@
                             </div>
                         </div>
 
-                        {{-- Store Assignment Tab --}}
-                        <div id="tab-stores" class="tab-pane">
-                            <div class="panel-body">
-                                <div class="form-group">
-                                    <label class="required-field">Select Stores</label>
-                                    <div class="form-help mb-3">Select the stores where this product will be available</div>
-                                    
-                                    @foreach($stores as $store)
-                                        <div class="store-section">
-                                            <div class="form-check mb-3">
-                                                <input class="form-check-input store-checkbox" type="checkbox" 
-                                                       name="stores[{{ $store->id }}][selected]" 
-                                                       value="1" 
-                                                       id="store-{{ $store->id }}"
-                                                       data-store-id="{{ $store->id }}">
-                                                <label class="form-check-label" for="store-{{ $store->id }}">
-                                                    <strong>{{ $store->name }}</strong>
-                                                    @if($store->description)
-                                                        <br><small class="text-muted">{{ $store->description }}</small>
-                                                    @endif
-                                                </label>
-                                            </div>
-                                            
-                                            <div class="store-details" id="store-details-{{ $store->id }}" style="display: none;">
-                                                <input type="hidden" name="stores[{{ $store->id }}][store_id]" value="{{ $store->id }}">
-                                                
-                                                <div class="row">
-                                                    <div class="col-md-3">
-                                                        <div class="form-group">
-                                                            <label>Price (Rp)</label>
-                                                            <input type="number" name="stores[{{ $store->id }}][price]" 
-                                                                   class="form-control" placeholder="0.00" step="0.01">
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-md-3">
-                                                        <div class="form-group">
-                                                            <label>Sale Price (Rp)</label>
-                                                            <input type="number" name="stores[{{ $store->id }}][sale_price]" 
-                                                                   class="form-control" placeholder="0.00" step="0.01">
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-md-3">
-                                                        <div class="form-group">
-                                                            <label>Cost Price (Rp)</label>
-                                                            <input type="number" name="stores[{{ $store->id }}][cost_price]" 
-                                                                   class="form-control" placeholder="0.00" step="0.01">
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-md-3">
-                                                        <div class="form-group">
-                                                            <label>Stock Quantity</label>
-                                                            <input type="number" name="stores[{{ $store->id }}][stock_quantity]" 
-                                                                   class="form-control" placeholder="0" min="0">
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div class="row">
-                                                    <div class="col-md-3">
-                                                        <div class="form-group">
-                                                            <label>Min Stock Level</label>
-                                                            <input type="number" name="stores[{{ $store->id }}][min_stock_level]" 
-                                                                   class="form-control" placeholder="0" min="0">
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-md-3">
-                                                        <div class="form-group">
-                                                            <label>Max Stock Level</label>
-                                                            <input type="number" name="stores[{{ $store->id }}][max_stock_level]" 
-                                                                   class="form-control" placeholder="0" min="0">
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-md-3">
-                                                        <div class="form-group">
-                                                            <label>Stock Status</label>
-                                                            <select name="stores[{{ $store->id }}][stock_status]" class="form-control">
-                                                                <option value="in_stock">In Stock</option>
-                                                                <option value="out_of_stock">Out of Stock</option>
-                                                                <option value="on_backorder">On Backorder</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-md-3">
-                                                        <div class="form-group">
-                                                            <label>Manage Stock</label>
-                                                            <select name="stores[{{ $store->id }}][manage_stock]" class="form-control">
-                                                                <option value="1">Yes</option>
-                                                                <option value="0">No</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    @endforeach
-                                </div>
-                            </div>
-                        </div>
+                    
 
                         {{-- Variants Tab --}}
                         <div id="tab-variants" class="tab-pane">

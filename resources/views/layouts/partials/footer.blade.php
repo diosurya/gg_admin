@@ -10,9 +10,7 @@
     </div>
     <div>
         <strong>Copyright</strong> Gudang Grosiran &copy; {{ date('Y') }}
-        | Version {{ config('app.version', '1.0.0') }} | Support By <a target="_blank" href="https://github.com/diosurya">Dio Putra</a> |
-        @if(app()->environment() !== 'production')
-            <span class="badge badge-warning">{{ strtoupper(app()->environment()) }}</span>
-        @endif
+        | Version {{ config('app.version', '1.0.0') }} | Support By <a target="_blank" href="https://gudanggrosiran.com">Gudang Grosiran</a> |
+        <span class="badge badge-primary">Production</span>
     </div>
 </div>

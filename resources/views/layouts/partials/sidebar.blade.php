@@ -43,29 +43,33 @@
                     <li class="{{ request()->routeIs('admin.products.create') ? 'active' : '' }}">
                         <a href="{{ route('admin.products.create') }}">Add Product</a>
                     </li>
+                    <li class="{{ request()->routeIs('admin.product-categories*') ? 'active' : '' }}">
+                        <a href="{{ route('admin.product-categories.index') }}">Categories</a>
+                    </li>
                 </ul>
             </li>
 
-            {{-- E-commerce Section --}}
-            @can('access-products')
-            <li class="{{ request()->routeIs('admin.dashboard*') ? 'active' : '' }}">
-                <a href="#"><i class="fa fa-shopping-cart"></i> <span class="nav-label">E-commerce</span><span class="fa arrow"></span></a>
-                <ul class="nav nav-second-level {{ request()->routeIs('products*') ? '' : 'collapse' }}">
-                    <li class="{{ request()->routeIs('admin.products.index') ? 'active' : '' }}">
-                        <a href="{{ route('admin.products.index') }}">Products List</a>
+            <li class="{{ request()->routeIs('admin.blogs*') ? 'active' : '' }}">
+                <a href="{{ route('admin.blogs.index') }}"><i class="fa fa-book"></i> <span class="nav-label">Blogs</span></a>
+            </li>
+
+            <li class="{{ request()->routeIs('admin.pages*') ? 'active' : '' }}">
+                <a href="{{ route('admin.pages.index') }}"><i class="fa fa-file" aria-hidden="true"></i> <span class="nav-label">Pages</span></a>
+                
+            </li>
+
+             <li class="{{ request()->routeIs('admin.settings*') ? 'active' : '' }}">
+                <a href="#"><i class="fa fa-cog" aria-hidden="true"></i> <span class="nav-label">Settings</span><span class="fa arrow"></span></a>
+                <ul class="nav nav-second-level {{ request()->routeIs('admin.settings*') ? '' : 'collapse' }}">
+                    <li class="{{ request()->routeIs('admin.settings.sliders*') ? 'active' : '' }}">
+                        <a href="{{ route('admin.settings.sliders.index') }}">Sliders</a>
                     </li>
-                    <li class="{{ request()->routeIs('admin.products.create') ? 'active' : '' }}">
-                        <a href="{{ route('admin.products.create') }}">Add Product</a>
-                    </li>
-                    <li class="{{ request()->routeIs('categories*') ? 'active' : '' }}">
-                        <a href="{{ route('categories.index') }}">Categories</a>
-                    </li>
-                    <li class="{{ request()->routeIs('orders*') ? 'active' : '' }}">
-                        <a href="{{ route('orders.index') }}">Orders</a>
+                    <li class="{{ request()->routeIs('admin.settings.recommended-products.*') ? 'active' : '' }}">
+                        <a href="{{ route('admin.settings.recommended-products.index') }}">Recommended Products</a>
                     </li>
                 </ul>
             </li>
-            @endcan
+
 
             {{-- User Management --}}
             @can('manage-users')
