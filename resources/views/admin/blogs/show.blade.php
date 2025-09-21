@@ -69,11 +69,11 @@
                             </div>
                         @endif
 
-                        @if($blog->tags->count() > 0)
+                      @if($tags->count() > 0)
                             <div class="mb-2">
                                 <strong>Tags:</strong>
-                                @foreach($blog->tags as $tag)
-                                    <span class="badge bg-secondary me-1">{{ $tag->name }}</span>
+                                @foreach($tags as $tag)
+                                    <span class="badge bg-secondary text-white me-1">{{ $tag->name }}</span>
                                 @endforeach
                             </div>
                         @endif
@@ -237,15 +237,15 @@
             
 
             {{-- Tags --}}
-            @if($blog->tags->count() > 0)
+            @if($tags->count() > 0)
                 <div class="card mt-4">
                     <div class="card-header">
                         <h5 class="card-title mb-0">Tags</h5>
                     </div>
                     <div class="card-body">
                         <div class="d-flex flex-wrap">
-                            @foreach($blog->tags as $tag)
-                                <span class="badge bg-secondary me-2 mb-2">{{ $tag->name }}</span>
+                            @foreach($tags as $tag)
+                                <span class="badge bg-secondary text-white  me-2 mb-2">{{ $tag->name }}</span>
                             @endforeach
                         </div>
                     </div>

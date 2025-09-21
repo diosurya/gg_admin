@@ -11,7 +11,6 @@
         
         <h3>Welcome to Gudang Grosiran</h3>
         
-        <p>{{ config('app.description', 'Perfectly designed and precisely prepared admin theme with comprehensive management features.') }}</p>
         
         <p>Please login to access the admin panel.</p>
 
@@ -97,7 +96,7 @@
         </form>
         
         <p class="m-t">
-            <small>{{ config('app.name') }} &copy; {{ date('Y') }} | Version {{ config('app.version', '1.0.0') }}</small>
+            <small>Gudang Grosiran &copy; {{ date('Y') }} | Version {{ config('app.version', '1.0.0') }}</small>
         </p>
     </div>
 </div>

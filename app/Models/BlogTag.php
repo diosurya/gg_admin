@@ -45,4 +45,24 @@ class BlogTag extends Model
     {
         return $value ?: '#6c757d';
     }
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($tag) {
+            if (empty($tag->id)) {
+                $tag->id = (string) Str::uuid();
+            }
+            if (auth()->check()) {
+                $tag->created_by = auth()->id();
+            }
+        });
+
+        static::updating(function ($tag) {
+            if (auth()->check()) {
+                $tag->updated_by = auth()->id();
+            }
+        });
+    }
 }

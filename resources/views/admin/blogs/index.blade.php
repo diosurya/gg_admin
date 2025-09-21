@@ -106,7 +106,7 @@
                     <tr>
                         <th>Title</th>
                         <th>Category</th>
-                        <th>Slug</th>
+                        {{-- <th>Slug</th> --}}
                         <th>View Count</th>
                         <th>Status</th>
                         <th>Created By</th>
@@ -118,7 +118,7 @@
                 @forelse($blogs as $blog)
                     <tr>
                         <td>{{ $blog->title }}</td>
-                        <td>
+                         <td>
                             @if(!empty($blog->category_names))
                                 @foreach(explode(';', $blog->category_names) as $catName)
                                     <span class="badge bg-info">{{ $catName }}</span>
@@ -127,8 +127,6 @@
                                 <span class="text-muted">No Category</span>
                             @endif
                         </td>
-
-                        <td>{{ $blog->slug }}</td>
                         <td>{{ $blog->view_acount ?? 0 }}</td>
                         <td>
                             <span class="badge 

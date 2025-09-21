@@ -37,14 +37,17 @@
             <li class="{{ request()->routeIs('admin.products*') ? 'active' : '' }}">
                 <a href="#"><i class="fa fa-shopping-cart"></i> <span class="nav-label">E-commerce</span><span class="fa arrow"></span></a>
                 <ul class="nav nav-second-level {{ request()->routeIs('products*') ? '' : 'collapse' }}">
-                    <li class="{{ request()->routeIs('admin.products.index') ? 'active' : '' }}">
-                        <a href="{{ route('admin.products.index') }}">Products List</a>
+                    <li class="nav-item disabled">
+                        <a href="javascript:void(0)" class="nav-link disabled-link" style=" pointer-events: none;cursor: not-allowed;text-decoration: none;color: #848181 !important;">Orders</a>
                     </li>
-                    <li class="{{ request()->routeIs('admin.products.create') ? 'active' : '' }}">
-                        <a href="{{ route('admin.products.create') }}">Add Product</a>
+                    <li class="{{ request()->routeIs('admin.products*') ? 'active' : '' }}">
+                        <a href="{{ route('admin.products.index') }}">Products</a>
                     </li>
                     <li class="{{ request()->routeIs('admin.product-categories*') ? 'active' : '' }}">
                         <a href="{{ route('admin.product-categories.index') }}">Categories</a>
+                    </li>
+                     <li class="{{ request()->routeIs('admin.product-brand*') ? 'active' : '' }}">
+                        <a href="{{ route('admin.product-categories.index') }}">Brands</a>
                     </li>
                 </ul>
             </li>

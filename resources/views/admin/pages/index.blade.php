@@ -259,10 +259,7 @@
                             <td>{{ $page->formatted_created_at }}</td>
                             <td class="text-end">
                                 <div class="btn-group" role="group">
-                                    <a href="{{ route('admin.pages.show', $page->id) }}" 
-                                       class="btn btn-sm btn-info" title="View">
-                                        <i class="fa fa-eye"></i>
-                                    </a>
+                                    
                                     <a href="{{ route('admin.pages.edit', $page->id) }}" 
                                        class="btn btn-sm btn-warning" title="Edit">
                                         <i class="fa fa-edit"></i>

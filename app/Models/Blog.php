@@ -16,27 +16,8 @@ class Blog extends Model
     protected $keyType = 'string';
     public $incrementing = false;
 
-    protected $fillable = [
-        'title',
-        'slug',
-        'excerpt',
-        'content',
-        'featured_image',
-        'status',
-        'published_at',
-        'publish_at',
-        'author_id',
-        'view_count',
-        'likes_count',
-        'comments_count',
-        'reading_time',
-        'is_featured',
-        'allow_comments',
-        'meta_title',
-        'meta_description',
-        'meta_keywords',
-        'created_by',
-        'updated_by'
+    protected $guarded = [
+        'id',
     ];
 
     protected $casts = [
@@ -63,22 +44,22 @@ class Blog extends Model
         ];
     }
 
-    /** -------------------
-     * 🔗 Relationships
-     * ------------------- */
+
     public function categories()
     {
         return $this->belongsToMany(BlogCategory::class, 'blog_category_relationships', 'blog_id', 'category_id')
-                    ->using(BlogCategoryRelationship::class) // pakai model pivot
+                    ->using(BlogCategoryRelationship::class)
                     ->withPivot('is_primary')
                     ->withTimestamps();
     }
 
-    public function tags()
-    {
-        return $this->belongsToMany(BlogTag::class, 'blog_tags', 'blog_id', 'tag_id')
-                    ->withTimestamps();
-    }
+    // public function tags()
+    // {
+    //     return $this->belongsToMany(BlogTag::class, 'blog_tags', 'blog_id', 'tag_id')
+    //                 ->using(BlogTagPivot::class)
+    //                 ->withTimestamps()
+    //                  ->withPivot('id');
+    // }
 
     public function creator()
     {
@@ -111,10 +92,10 @@ class Blog extends Model
         return ucfirst(str_replace('_', ' ', $this->status));
     }
 
-    public function getExcerptAttribute($value)
-    {
-        return !empty($value) ? $value : Str::limit(strip_tags($this->content), 150);
-    }
+    // public function getExcerptAttribute($value)
+    // {
+    //     return !empty($value) ? $value : Str::limit(strip_tags($this->content), 150);
+    // }
 
     /** -------------------
      * 🔎 Scopes
@@ -146,12 +127,12 @@ class Blog extends Model
             : $query;
     }
 
-    public function scopeByTags($query, $tagIds)
-    {
-        return !empty($tagIds)
-            ? $query->whereHas('tags', fn($q) => $q->whereIn('tags.id', $tagIds))
-            : $query;
-    }
+    // public function scopeByTags($query, $tagIds)
+    // {
+    //     return !empty($tagIds)
+    //         ? $query->whereHas('tags', fn($q) => $q->whereIn('blog_tags.id', $tagIds))
+    //         : $query;
+    // }
 
     /** -------------------
      * 🚀 Boot

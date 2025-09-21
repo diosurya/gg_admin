@@ -102,9 +102,9 @@
                         <li><a class="nav-link active" data-toggle="tab" href="#tab-stores"> Store Assignment</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-basic"> Basic Info</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-details"> Details</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-variants"> Variants</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-images"> Image Cover</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-pricing"> Pricing & Discounts</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-images"> Images</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-variants"> Variants</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-categories"> Categories</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-seo"> SEO & Meta</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-shipping"> Shipping & Tax</a></li>
@@ -269,18 +269,66 @@
                                         </div>
                                     </div>
                                     
-                                    <div class="form-group row">
-                                        <label class="col-sm-2 col-form-label">Featured</label>
+                                    
+                                </fieldset>
+                            </div>
+                        </div>
+
+                        {{-- Images Tab --}}
+                        <div id="tab-images" class="tab-pane">
+                            <div class="panel-body">
+                                <div class="form-group row">
+                                        <label class="col-sm-2 col-form-label">Featured Image Cover</label>
                                         <div class="col-sm-10">
                                             <input type="checkbox" name="is_featured" class="js-switch" value="1" 
                                                    {{ old('is_featured') ? 'checked' : '' }}>
                                             <div class="form-help">Show product in featured section</div>
                                         </div>
                                     </div>
-                                </fieldset>
+                                <div class="form-group">
+                                    <label>Product Images</label>
+                                    <div class="form-help mb-2">Upload main product images. These will be used across all stores.</div>
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-sm-6">
+                                            <label>Store Filter (Optional)</label>
+                                            <select id="imageStoreFilter" class="form-control select2">
+                                                <option value="">All Stores</option>
+                                                @foreach($stores as $store)
+                                                    <option value="{{ $store->id }}">{{ $store->name }}</option>
+                                                @endforeach
+                                            </select>
+                                            <div class="form-help">Filter images by store (for organization purposes)</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="dropzone" id="productDropzone">
+                                        <div class="dz-message">
+                                            <h3>Drop files here or click to upload.</h3>
+                                            <em>(Multiple files can be uploaded)</em>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="table-responsive mt-3">
+                                    <table class="table table-bordered" id="imageTable" style="display: none;">
+                                        <thead>
+                                        <tr>
+                                            <th>Image Preview</th>
+                                            <th>Image Name</th>
+                                            <th>Alt Text</th>
+                                            <th>Store Filter</th>
+                                            <th>Sort Order</th>
+                                            <th>Is Primary</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody id="imageTableBody">
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
-
                     
 
                         {{-- Variants Tab --}}
@@ -364,54 +412,6 @@
                                         <!-- Discounts will be added here dynamically -->
                                     </div>
                                 </fieldset>
-                            </div>
-                        </div>
-
-                        {{-- Images Tab --}}
-                        <div id="tab-images" class="tab-pane">
-                            <div class="panel-body">
-                                <div class="form-group">
-                                    <label>Product Images</label>
-                                    <div class="form-help mb-2">Upload main product images. These will be used across all stores.</div>
-                                    
-                                    <div class="row mb-3">
-                                        <div class="col-sm-6">
-                                            <label>Store Filter (Optional)</label>
-                                            <select id="imageStoreFilter" class="form-control select2">
-                                                <option value="">All Stores</option>
-                                                @foreach($stores as $store)
-                                                    <option value="{{ $store->id }}">{{ $store->name }}</option>
-                                                @endforeach
-                                            </select>
-                                            <div class="form-help">Filter images by store (for organization purposes)</div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="dropzone" id="productDropzone">
-                                        <div class="dz-message">
-                                            <h3>Drop files here or click to upload.</h3>
-                                            <em>(Multiple files can be uploaded)</em>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div class="table-responsive mt-3">
-                                    <table class="table table-bordered" id="imageTable" style="display: none;">
-                                        <thead>
-                                        <tr>
-                                            <th>Image Preview</th>
-                                            <th>Image Name</th>
-                                            <th>Alt Text</th>
-                                            <th>Store Filter</th>
-                                            <th>Sort Order</th>
-                                            <th>Is Primary</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                        </thead>
-                                        <tbody id="imageTableBody">
-                                        </tbody>
-                                    </table>
-                                </div>
                             </div>
                         </div>
 
@@ -826,9 +826,65 @@ $(document).ready(function(){
                                 <option value="">Select Store</option>
                                 ${storeOptions}
                             </select>
-                        </div>
-                        
+                        </div>   
+                    </div>
+                   
+                    <div class="col-sm-3">
                         <div class="form-group">
+                            <label>Attribute Type</label>
+                            <input type="text" name="variants[${variantCount}][type]" class="form-control" placeholder="Color, Size, Material, etc.">
+                        </div>
+                    </div>
+                    <div class="col-sm-3">
+                        <div class="form-group">
+                            <label>Attribute Name</label>
+                            <input type="text" name="variants[${variantCount}][color]" class="form-control" placeholder="Red, Large, Cotton, etc.">
+                        </div>
+                    </div>
+                    <div class="col-sm-3">
+                        <div class="form-group">
+                            <label>Attribute Value</label>
+                            <input type="text" name="variants[${variantCount}][value]" class="form-control" placeholder="Value description">
+                        </div>
+                    </div>
+                    <div class="col-sm-3">
+                        <div class="form-group">
+                            <label>SKU</label>
+                            <input type="text" name="variants[${variantCount}][sku]" class="form-control" placeholder="Variant SKU">
+                        </div>
+                    </div>
+             
+                    <div class="col-sm-3">
+                        <div class="form-group">
+                            <label>Price (Rp)</label>
+                            <div class="input-group">
+                                <span class="input-group-prepend">
+                                    <span class="input-group-text">Rp</span>
+                                </span>
+                                <input type="number" name="variants[${variantCount}][price]" class="form-control" placeholder="0.00" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-sm-3">
+                        <div class="form-group">
+                            <label>Sale Price (Rp)</label>
+                            <div class="input-group">
+                                <span class="input-group-prepend">
+                                    <span class="input-group-text">Rp</span>
+                                </span>
+                                <input type="number" name="variants[${variantCount}][sale_price]" class="form-control" placeholder="0.00" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-sm-3">
+                        <div class="form-group">
+                            <label>Stock Quantity</label>
+                            <input type="number" name="variants[${variantCount}][stock_quantity]" class="form-control" placeholder="0" min="0">
+                        </div>
+                    </div>
+                
+                </div>
+                <div class="form-group">
                             <label>Variant Images</label>
                             <div class="dropzone variant-dropzone" id="variantDropzone-${variantCount}">
                                 <div class="dz-message">
@@ -837,81 +893,20 @@ $(document).ready(function(){
                                 </div>
                             </div>
                         </div>
-                        <div class="table-responsive mt-2">
-                            <table class="table table-sm table-bordered variant-image-table" id="variantImageTable-${variantCount}" style="display: none;">
-                                <thead>
-                                <tr>
-                                    <th width="80">Preview</th>
-                                    <th>Image Name</th>
-                                    <th>Alt Text</th>
-                                    <th width="100">Sort Order</th>
-                                    <th width="80">Actions</th>
-                                </tr>
-                                </thead>
-                                <tbody id="variantImageTableBody-${variantCount}">
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div class="col-md-9">
-                        <div class="row">
-                            <div class="col-sm-3">
-                                <div class="form-group">
-                                    <label>Attribute Type</label>
-                                    <input type="text" name="variants[${variantCount}][type]" class="form-control" placeholder="Color, Size, Material, etc.">
-                                </div>
-                            </div>
-                            <div class="col-sm-3">
-                                <div class="form-group">
-                                    <label>Attribute Name</label>
-                                    <input type="text" name="variants[${variantCount}][color]" class="form-control" placeholder="Red, Large, Cotton, etc.">
-                                </div>
-                            </div>
-                            <div class="col-sm-3">
-                                <div class="form-group">
-                                    <label>Attribute Value</label>
-                                    <input type="text" name="variants[${variantCount}][value]" class="form-control" placeholder="Value description">
-                                </div>
-                            </div>
-                            <div class="col-sm-3">
-                                <div class="form-group">
-                                    <label>SKU</label>
-                                    <input type="text" name="variants[${variantCount}][sku]" class="form-control" placeholder="Variant SKU">
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="row">
-                            <div class="col-sm-4">
-                                <div class="form-group">
-                                    <label>Price (Rp)</label>
-                                    <div class="input-group">
-                                        <span class="input-group-prepend">
-                                            <span class="input-group-text">Rp</span>
-                                        </span>
-                                        <input type="number" name="variants[${variantCount}][price]" class="form-control" placeholder="0.00" step="0.01">
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-sm-4">
-                                <div class="form-group">
-                                    <label>Sale Price (Rp)</label>
-                                    <div class="input-group">
-                                        <span class="input-group-prepend">
-                                            <span class="input-group-text">Rp</span>
-                                        </span>
-                                        <input type="number" name="variants[${variantCount}][sale_price]" class="form-control" placeholder="0.00" step="0.01">
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-sm-4">
-                                <div class="form-group">
-                                    <label>Stock Quantity</label>
-                                    <input type="number" name="variants[${variantCount}][stock_quantity]" class="form-control" placeholder="0" min="0">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                 <div class="table-responsive mt-2">
+                    <table class="table table-sm table-bordered variant-image-table" id="variantImageTable-${variantCount}" style="display: none;">
+                        <thead>
+                        <tr>
+                            <th width="80">Preview</th>
+                            <th>Image Name</th>
+                            <th>Alt Text</th>
+                            <th width="100">Sort Order</th>
+                            <th width="80">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody id="variantImageTableBody-${variantCount}">
+                        </tbody>
+                    </table>
                 </div>
             </div>
         `;

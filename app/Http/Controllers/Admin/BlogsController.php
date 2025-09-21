@@ -99,7 +99,7 @@ class BlogsController extends Controller {
     {
         $blog = new Blog();
         $categories = BlogCategory::orderBy('name')->get();
-        $tags = BlogTag::orderBy('name')->get();
+        $tags = DB::table('tags')->where('type', 'blog')->orderBy('name')->get();
         $statuses = Blog::getStatuses();
 
         return view('admin.blogs.create', compact('blog', 'categories', 'tags', 'statuses'));
@@ -169,7 +169,17 @@ class BlogsController extends Controller {
 
             // Sync tags
             if ($request->filled('tag_ids')) {
-                $blog->tags()->sync($request->tag_ids);
+                $insertData = [];
+                foreach ($request->tag_ids as $tagId) {
+                    $insertData[] = [
+                        'id'         => (string) Str::uuid(),
+                        'blog_id'    => $blog->id,
+                        'tag_id'     => $tagId,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                }
+                DB::table('blog_tags')->insert($insertData);
             }
 
             DB::commit();
@@ -188,9 +198,13 @@ class BlogsController extends Controller {
      */
     public function show(Blog $blog)
     {
-        $blog->load(['categories', 'tags', 'creator', 'updater']);
-
-        return view('admin.blogs.show', compact('blog'));
+        $blog->load(['categories', 'creator', 'updater']);
+        $tags = DB::table('tags')
+            ->join('blog_tags', 'tags.id', '=', 'blog_tags.tag_id')
+            ->where('blog_tags.blog_id', $blog->id)
+            ->select('tags.*')
+            ->get();
+        return view('admin.blogs.show', compact('blog', 'tags'));
     }
 
     /**
@@ -198,9 +212,15 @@ class BlogsController extends Controller {
      */
     public function edit(Blog $blog)
     {
-        $blog->load(['categories', 'tags']);
+        $blog->load(['categories']);
         $categories = BlogCategory::orderBy('name')->get();
-        $tags = BlogTag::orderBy('name')->get();
+        $tags = DB::table('tags')
+            ->leftJoin('blog_tags', function($join) use ($blog) {
+                $join->on('tags.id', '=', 'blog_tags.tag_id')
+                    ->where('blog_tags.blog_id', $blog->id);
+            })
+            ->select('tags.*', 'blog_tags.blog_id as selected')
+            ->get();
         $statuses = Blog::getStatuses();
 
         return view('admin.blogs.edit', compact('blog', 'categories', 'tags', 'statuses'));
@@ -213,7 +233,7 @@ class BlogsController extends Controller {
     {
         $request->validate([
             'title' => 'required|string|max:255',
-            'slug'  => ['nullable', 'string', 'max:255', Rule::unique('blogs')->ignore($blog->id)],
+            'slug'  => ['nullable','string','max:255', Rule::unique('blogs')->ignore($blog->id)],
             'content' => 'required|string',
             'excerpt' => 'nullable|string|max:500',
             'featured_image' => 'nullable|image|mimes:webp,jpeg,png,jpg,gif|max:2048',
@@ -229,23 +249,20 @@ class BlogsController extends Controller {
         ]);
 
         DB::beginTransaction();
-
         try {
-            $data = $request->except(['featured_image', 'category_ids', 'tag_ids']);
+            $data = $request->except(['category_ids','tag_ids','featured_image']);
 
-            if (empty($data['slug'])) {
-                $data['slug'] = Str::slug($data['title']);
-            }
+            // Generate slug jika kosong
+            if (empty($data['slug'])) $data['slug'] = Str::slug($data['title']);
 
+            // Featured image
             if ($request->hasFile('featured_image')) {
                 if ($blog->featured_image && Storage::disk('public')->exists($blog->featured_image)) {
                     Storage::disk('public')->delete($blog->featured_image);
                 }
-
                 $image = $request->file('featured_image');
-                $imageName = time() . '_' . Str::slug(pathinfo($image->getClientOriginalName(), PATHINFO_FILENAME)) . '.' . $image->getClientOriginalExtension();
-                $imagePath = $image->storeAs('blogs', $imageName, 'public');
-                $data['featured_image'] = $imagePath;
+                $imageName = time().'_'.Str::slug(pathinfo($image->getClientOriginalName(), PATHINFO_FILENAME)).'.'.$image->getClientOriginalExtension();
+                $data['featured_image'] = $image->storeAs('blogs', $imageName, 'public');
             }
 
             if ($data['status'] === 'published' && empty($data['published_at'])) {
@@ -254,20 +271,34 @@ class BlogsController extends Controller {
 
             $blog->update($data);
 
+            // Categories sync (Eloquent)
             $blog->categories()->sync($request->category_ids ?? []);
-            $blog->tags()->sync($request->tag_ids ?? []);
+
+            // Tags sync (manual query)
+            DB::table('blog_tags')->where('blog_id', $blog->id)->delete();
+            if ($request->filled('tag_ids')) {
+                $insertTags = [];
+                foreach ($request->tag_ids as $tagId) {
+                    $insertTags[] = [
+                        'id' => (string) Str::uuid(),
+                        'blog_id' => $blog->id,
+                        'tag_id' => $tagId,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                }
+                DB::table('blog_tags')->insert($insertTags);
+            }
 
             DB::commit();
+            return redirect()->route('admin.blogs.index')->with('success','Blog updated successfully.');
 
-            return redirect()->route('admin.blogs.index')
-                ->with('success', 'Blog updated successfully.');
         } catch (\Throwable $e) {
             DB::rollBack();
-
-            return back()->withErrors(['error' => $e->getMessage()])
-                        ->withInput();
+            return back()->withErrors(['error'=>$e->getMessage()])->withInput();
         }
     }
+
 
 
     /**

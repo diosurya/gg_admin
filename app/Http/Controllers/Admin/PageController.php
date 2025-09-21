@@ -154,7 +154,7 @@ class PageController extends Controller
         $page = Page::create($validated);
 
         return redirect()
-            ->route('admin.pages.show', $page->id)
+            ->route('admin.pages.index', $page->id)
             ->with('success', 'Page created successfully!');
     }
 

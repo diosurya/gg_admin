@@ -125,9 +125,9 @@
                         <li><a class="nav-link active" data-toggle="tab" href="#tab-stores"> Store Assignment</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-basic"> Basic Info</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-details"> Details</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-variants"> Variants</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-images"> Image Cover</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-pricing"> Pricing & Discounts</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-images"> Images</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-variants"> Variants</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-categories"> Categories</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-seo"> SEO & Meta</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-shipping"> Shipping & Tax</a></li>
@@ -292,15 +292,79 @@
                                         </div>
                                     </div>
                                     
-                                    <div class="form-group row">
-                                        <label class="col-sm-2 col-form-label">Featured</label>
-                                        <div class="col-sm-10">
-                                            <input type="checkbox" name="is_featured" class="js-switch" value="1" 
-                                                   {{ old('is_featured', $product->is_featured) ? 'checked' : '' }}>
-                                            <div class="form-help">Show product in featured section</div>
+                                    
+                                </fieldset>
+                            </div>
+                        </div>
+
+                        
+                        {{-- Images Tab --}}
+                        <div id="tab-images" class="tab-pane">
+                            <div class="panel-body">
+                                <div class="form-group row">
+                                    <label class="col-sm-2 col-form-label">Featured Image Cover</label>
+                                    <div class="col-sm-10">
+                                        <input type="checkbox" name="is_featured" class="js-switch" value="1" 
+                                                {{ old('is_featured', $product->is_featured) ? 'checked' : '' }}>
+                                        <div class="form-help">Show product in featured section</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Product Images</label>
+                                    <div class="form-help mb-2">Upload main product images. These will be used across all stores.</div>
+                                    
+                                    <div class="form-group">
+                                        <label>Existing Images</label>
+                                        <div class="existing-images-container mb-3">
+                                            @foreach($coverProduct as $media)
+                                                <div class="existing-image" id="existing-main-media-{{ $media->id }}">
+                                                    <img src="{{ $media->image_path }}" class="img-thumbnail" style="max-width:200px;">
+                                                    <button type="button" class="remove-existing" onclick="removeExistingMainMedia('{{ $media->id }}')">&times;</button>
+                                                    <input type="hidden" name="keep_main_media[]" value="{{ $media->id }}">
+                                                </div>
+                                            @endforeach
                                         </div>
                                     </div>
-                                </fieldset>
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-sm-6">
+                                            <label>Store Filter (Optional)</label>
+                                            <select id="imageStoreFilter" class="form-control select2">
+                                                <option value="">All Stores</option>
+                                                @foreach($stores as $store)
+                                                    <option value="{{ $store->id }}">{{ $store->name }}</option>
+                                                @endforeach
+                                            </select>
+                                            <div class="form-help">Filter images by store (for organization purposes)</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="dropzone" id="productDropzone">
+                                        <div class="dz-message">
+                                            <h3>Drop files here or click to upload.</h3>
+                                            <em>(Multiple files can be uploaded)</em>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="table-responsive mt-3">
+                                    <table class="table table-bordered" id="imageTable" style="display: none;">
+                                        <thead>
+                                        <tr>
+                                            <th>Image Preview</th>
+                                            <th>Image Name</th>
+                                            <th>Alt Text</th>
+                                            <th>Store Filter</th>
+                                            <th>Sort Order</th>
+                                            <th>Is Primary</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody id="imageTableBody">
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
 
@@ -504,66 +568,6 @@
                             </div>
                         </div>
 
-                        {{-- Images Tab --}}
-                        <div id="tab-images" class="tab-pane">
-                            <div class="panel-body">
-                                <div class="form-group">
-                                    <label>Product Images</label>
-                                    <div class="form-help mb-2">Upload main product images. These will be used across all stores.</div>
-                                    
-                                    <div class="form-group">
-                                        <label>Existing Images</label>
-                                        <div class="existing-images-container mb-3">
-                                            @foreach($coverProduct as $media)
-                                                <div class="existing-image" id="existing-main-media-{{ $media->id }}">
-                                                    <img src="{{ $media->image_path }}" class="img-thumbnail" style="max-width:200px;">
-                                                    <button type="button" class="remove-existing" onclick="removeExistingMainMedia('{{ $media->id }}')">&times;</button>
-                                                    <input type="hidden" name="keep_main_media[]" value="{{ $media->id }}">
-                                                </div>
-                                            @endforeach
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="row mb-3">
-                                        <div class="col-sm-6">
-                                            <label>Store Filter (Optional)</label>
-                                            <select id="imageStoreFilter" class="form-control select2">
-                                                <option value="">All Stores</option>
-                                                @foreach($stores as $store)
-                                                    <option value="{{ $store->id }}">{{ $store->name }}</option>
-                                                @endforeach
-                                            </select>
-                                            <div class="form-help">Filter images by store (for organization purposes)</div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="dropzone" id="productDropzone">
-                                        <div class="dz-message">
-                                            <h3>Drop files here or click to upload.</h3>
-                                            <em>(Multiple files can be uploaded)</em>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div class="table-responsive mt-3">
-                                    <table class="table table-bordered" id="imageTable" style="display: none;">
-                                        <thead>
-                                        <tr>
-                                            <th>Image Preview</th>
-                                            <th>Image Name</th>
-                                            <th>Alt Text</th>
-                                            <th>Store Filter</th>
-                                            <th>Sort Order</th>
-                                            <th>Is Primary</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                        </thead>
-                                        <tbody id="imageTableBody">
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
 
                         {{-- Categories Tab --}}
                         <div id="tab-categories" class="tab-pane">
