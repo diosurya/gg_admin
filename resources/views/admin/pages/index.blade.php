@@ -343,7 +343,16 @@
                                                 </form>
                                             </li>
                                         </ul>
+
                                     </div>
+
+                                    <a class="btn btn-sm btn-danger" href="javascript:void(0)"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#deleteModal"
+                                        data-id="{{ $page->id }}"
+                                        data-title="{{ $page->title }}">
+                                        <i class="fa fa-trash"></i>
+                                    </a>
                                 </div>
                             </td>
                         </tr>
@@ -366,6 +375,32 @@
         </div>
     </div>
 </div>
+
+{{-- Modal Delete --}}
+    <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="POST" id="deleteForm">
+      @csrf
+      @method('DELETE')
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Delete Page</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p>Are you sure you want to delete <strong id="pageTitle"></strong>?</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Delete</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
 
 @push('scripts')
 <script>
@@ -440,6 +475,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initial count update
     updateSelectedCount();
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteModal = document.getElementById('deleteModal');
+    if (deleteModal) {
+        deleteModal.addEventListener('show.bs.modal', event => {
+            const button = event.relatedTarget;
+            const id = button.getAttribute('data-id');
+            const title = button.getAttribute('data-title');
+
+            document.getElementById('pageTitle').textContent = title;
+
+            const form = document.getElementById('deleteForm');
+            form.action = "{{ route('admin.pages.destroy', ':id') }}".replace(':id', id);
+        });
+    }
 });
 </script>
 @endpush
