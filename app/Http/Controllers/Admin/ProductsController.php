@@ -1626,6 +1626,40 @@ class ProductsController extends Controller
             return response()->json(['error' => 'Product not found!'], 404);
         }
 
+        DB::beginTransaction();
+        try {
+
+            DB::table('product_variants')
+                ->where('product_id', $id)
+                ->delete();
+
+             DB::table('product_stores')
+                ->where('product_id', $id)
+                ->delete();
+
+            DB::table('product_category_relationships')
+                ->where('product_id', $id)
+                ->delete();
+
+            DB::table('product_tags')
+                ->where('product_id', $id)
+                ->delete();
+
+            DB::table('products')
+                ->where('id', $id)
+                ->delete();
+
+            DB::commit();
+
+             return redirect()
+                ->route('admin.products.index')
+                ->with('success', 'Data deleted successfully!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+        return response()->json(['error' => 'Failed to delete product: ' . $e->getMessage()], 500);
+        }
+
         // Soft delete
         DB::table('products')
             ->where('id', $id)
