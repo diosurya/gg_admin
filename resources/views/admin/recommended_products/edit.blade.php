@@ -5,7 +5,7 @@
 @php
     $pageTitle = 'Edit Recommended Product';
     $breadcrumbs = [
-        ['title' => 'Recommended Products', 'url' => route('admin.recommended-products.index')],
+        ['title' => 'Recommended Products', 'url' => route('admin.settings.recommended-products.index')],
         ['title' => 'Edit']
     ];
 @endphp
@@ -34,7 +34,7 @@
         @endif
 
         <div class="row">
-            <div class="col-lg-8">
+            <div class="col-lg-12">
                 <div class="card">
                     <div class="card-header">
                         <h5 class="card-title mb-0">Recommended Product Settings</h5>
@@ -58,12 +58,13 @@
                         {{-- Section --}}
                         <div class="mb-3">
                             <label for="section" class="form-label">Section</label>
-                            <select name="section" id="section" 
-                                    class="form-control @error('section') is-invalid @enderror">
+                            <select name="section" id="section" class="form-control @error('section') is-invalid @enderror">
                                 <option value="recommended" {{ old('section', $recommendedProduct->section) == 'recommended' ? 'selected' : '' }}>Recommended</option>
                                 <option value="best-seller" {{ old('section', $recommendedProduct->section) == 'best-seller' ? 'selected' : '' }}>Best Seller</option>
                                 <option value="new-products" {{ old('section', $recommendedProduct->section) == 'new-products' ? 'selected' : '' }}>New Products</option>
                                 <option value="special-offer" {{ old('section', $recommendedProduct->section) == 'special-offer' ? 'selected' : '' }}>Special Offer</option>
+                                <option value="special-offer" {{ old('section', $recommendedProduct->section) ==  'penawaran-hari-ini' ? 'selected' : '' }}>Penawaran Hari Ini</option>
+
                             </select>
                             @error('section')
                                 <div class="invalid-feedback">{{ $message }}</div>
@@ -91,7 +92,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="fa fa-save"></i> Update Recommended Product
                         </button>
-                        <a href="{{ route('admin.recommended-products.index') }}" class="btn btn-secondary">
+                        <a href="{{ route('admin.settings.recommended-products.index') }}" class="btn btn-secondary">
                             <i class="fa fa-times"></i> Cancel
                         </a>
                     </div>

@@ -167,15 +167,13 @@ class PageController extends Controller
 
     public function edit(Page $page)
     {
-        $parentPages = Page::whereNull('parent_id')
-            ->where('id', '!=', $page->id) // Exclude current page
-            ->orderBy('title')
-            ->get(['id', 'title']);
-        
-        $templates = $this->getAvailableTemplates();
+        $parentPages = Page::where('id', '!=', $page->id)->orderBy('title')->get(['id', 'title']);
 
-        return view('admin.pages.form', compact('page', 'parentPages', 'templates'));
+        $templates = ['default', 'landing', 'contact'];
+
+        return view('admin.pages.edit', compact('page', 'parentPages', 'templates'));
     }
+
 
     public function update(Request $request, Page $page)
     {
@@ -253,7 +251,6 @@ class PageController extends Controller
 
         // Handle homepage setting
         if (!empty($validated['is_homepage']) && !$page->is_homepage) {
-            // Remove homepage flag from other pages
             Page::where('is_homepage', true)->update(['is_homepage' => false]);
         }
 
@@ -265,7 +262,8 @@ class PageController extends Controller
         $page->update($validated);
 
         return redirect()
-            ->route('admin.pages.show', $page->id)
+            // ->route('admin.pages.index', $page->id)
+            ->route('admin.pages.index')
             ->with('success', 'Page updated successfully!');
     }
 

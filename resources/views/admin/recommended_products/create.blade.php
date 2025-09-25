@@ -5,7 +5,7 @@
 @php
     $pageTitle = 'Create Recommended Product';
     $breadcrumbs = [
-        ['title' => 'Recommended Products', 'url' => route('admin.recommended-products.index')],
+        ['title' => 'Recommended Products', 'url' => route('admin.settings.recommended-products.index')],
         ['title' => 'Create']
     ];
 @endphp
@@ -56,12 +56,12 @@
                         {{-- Section --}}
                         <div class="mb-3">
                             <label for="section" class="form-label">Section</label>
-                            <select name="section" id="section" 
-                                    class="form-control @error('section') is-invalid @enderror">
+                            <select name="section" id="section" class="form-control @error('section') is-invalid @enderror">
                                 <option value="recommended" {{ old('section', 'recommended') == 'recommended' ? 'selected' : '' }}>Recommended</option>
                                 <option value="best-seller" {{ old('section') == 'best-seller' ? 'selected' : '' }}>Best Seller</option>
                                 <option value="new-products" {{ old('section') == 'new-products' ? 'selected' : '' }}>New Products</option>
                                 <option value="special-offer" {{ old('section') == 'special-offer' ? 'selected' : '' }}>Special Offer</option>
+                                <option value="special-offer" {{ old('section') == 'penawaran-hari-ini' ? 'selected' : '' }}>Penawaran Hari Ini</option>
                             </select>
                             @error('section')
                                 <div class="invalid-feedback">{{ $message }}</div>

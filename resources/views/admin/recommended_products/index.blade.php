@@ -32,6 +32,7 @@
                             <option value="best_seller" {{ request('section') === 'best_seller' ? 'selected' : '' }}>Best Seller</option>
                             <option value="new_products" {{ request('section') === 'new_products' ? 'selected' : '' }}>New Products</option>
                             <option value="special_offer" {{ request('section') === 'special_offer' ? 'selected' : '' }}>Special Offer</option>
+                            <option value="special-offer" {{ request('section') === 'penawaran-hari-ini' ? 'selected' : '' }}>Penawaran Hari Ini</option>
                         </select>
                     </div>
                 </div>

@@ -48,7 +48,7 @@ class RecommendedProductController extends Controller
 
         RecommendedProduct::create($request->all());
 
-        return redirect()->route('admin.recommended-products.index')
+        return redirect()->route('admin.settings.recommended-products.index')
             ->with('success', 'Recommended Product added successfully.');
     }
 
@@ -78,7 +78,7 @@ class RecommendedProductController extends Controller
 
         $recommendedProduct->update($request->all());
 
-        return redirect()->route('admin.recommended-products.index')
+        return redirect()->route('admin.settings.recommended-products.index')
             ->with('success', 'Recommended Product updated successfully.');
     }
 
@@ -87,7 +87,7 @@ class RecommendedProductController extends Controller
         $recommendedProduct = RecommendedProduct::findOrFail($id);
         $recommendedProduct->delete();
 
-        return redirect()->route('admin.recommended-products.index')
+        return redirect()->route('admin.settings.recommended-products.index')
             ->with('success', 'Recommended Product deleted successfully.');
     }
 }

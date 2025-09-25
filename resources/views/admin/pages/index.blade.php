@@ -124,7 +124,7 @@
     </form>
 
     {{-- Bulk Actions --}}
-    <div class="card mb-3">
+    <!-- <div class="card mb-3">
         <div class="card-body py-2">
             <form id="bulkActionForm" method="POST" action="{{ route('admin.pages.bulk-action') }}">
                 @csrf
@@ -153,7 +153,7 @@
                 </div>
             </form>
         </div>
-    </div>
+    </div> -->
 
     {{-- Table --}}
     <div class="card">
@@ -188,15 +188,13 @@
                 <table class="table table-striped align-middle page-hierarchy">
                     <thead>
                         <tr>
-                            <th width="40">
+                            <!-- <th width="40">
                                 <input type="checkbox" id="selectAllTable" class="form-check-input">
-                            </th>
+                            </th> -->
                             <th>Title</th>
                             <th>Slug</th>
                             <th width="100">Template</th>
                             <th width="80">Status</th>
-                            <th width="80">Homepage</th>
-                            <th width="80">In Menu</th>
                             <th width="80">Views</th>
                             <th width="120">Created By</th>
                             <th width="100">Created At</th>
@@ -206,10 +204,10 @@
                     <tbody>
                     @forelse($pages as $page)
                         <tr class="depth-{{ $page->depth }}">
-                            <td>
+                            <!-- <td>
                                 <input type="checkbox" name="page_ids[]" value="{{ $page->id }}" 
                                        class="form-check-input page-checkbox">
-                            </td>
+                            </td> -->
                             <td>
                                 <div class="d-flex align-items-center">
                                     @if($page->depth > 0)
@@ -240,20 +238,7 @@
                                     {{ ucfirst($page->status) }}
                                 </span>
                             </td>
-                            <td class="text-center">
-                                @if($page->is_homepage)
-                                    <i class="fa fa-check text-success"></i>
-                                @else
-                                    <i class="fa fa-times text-muted"></i>
-                                @endif
-                            </td>
-                            <td class="text-center">
-                                @if($page->show_in_menu)
-                                    <i class="fa fa-check text-success"></i>
-                                @else
-                                    <i class="fa fa-times text-muted"></i>
-                                @endif
-                            </td>
+                            
                             <td>{{ number_format($page->view_count) }}</td>
                             <td>{{ $page->creator_name }}</td>
                             <td>{{ $page->formatted_created_at }}</td>
@@ -261,10 +246,16 @@
                                 <div class="btn-group" role="group">
                                     
                                     <a href="{{ route('admin.pages.edit', $page->id) }}" 
-                                       class="btn btn-sm btn-warning" title="Edit">
+                                       class="btn btn-sm btn-warning mr-1" title="Edit">
                                         <i class="fa fa-edit"></i>
                                     </a>
-                                    
+                                    <a class="btn btn-sm btn-danger  mr-1" href="javascript:void(0)"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#deleteModal"
+                                        data-id="{{ $page->id }}"
+                                        data-title="{{ $page->title }}">
+                                        <i class="fa fa-trash"></i>
+                                    </a>
                                     <div class="btn-group" role="group">
                                         <button type="button" class="btn btn-sm btn-secondary dropdown-toggle" 
                                                 data-bs-toggle="dropdown">
@@ -346,13 +337,7 @@
 
                                     </div>
 
-                                    <a class="btn btn-sm btn-danger" href="javascript:void(0)"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#deleteModal"
-                                        data-id="{{ $page->id }}"
-                                        data-title="{{ $page->title }}">
-                                        <i class="fa fa-trash"></i>
-                                    </a>
+                                   
                                 </div>
                             </td>
                         </tr>
