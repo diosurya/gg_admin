@@ -220,6 +220,7 @@ class BlogsController extends Controller {
                     ->where('blog_tags.blog_id', $blog->id);
             })
             ->select('tags.*', 'blog_tags.blog_id as selected')
+            ->where('type', 'blog')
             ->get();
         $statuses = Blog::getStatuses();
 
@@ -252,16 +253,20 @@ class BlogsController extends Controller {
         try {
             $data = $request->except(['category_ids','tag_ids','featured_image']);
 
-            // Generate slug jika kosong
+            // Generate slug if null
             if (empty($data['slug'])) $data['slug'] = Str::slug($data['title']);
 
-            // Featured image
+            // Handle featured image
             if ($request->hasFile('featured_image')) {
+                // hapus lama jika ada
                 if ($blog->featured_image && Storage::disk('public')->exists($blog->featured_image)) {
                     Storage::disk('public')->delete($blog->featured_image);
                 }
+
                 $image = $request->file('featured_image');
-                $imageName = time().'_'.Str::slug(pathinfo($image->getClientOriginalName(), PATHINFO_FILENAME)).'.'.$image->getClientOriginalExtension();
+                $imageName = time() . '_' . Str::slug(pathinfo($image->getClientOriginalName(), PATHINFO_FILENAME)) . '.' . $image->getClientOriginalExtension();
+
+                // simpan baru → otomatis return path: blogs/namafile.ext
                 $data['featured_image'] = $image->storeAs('blogs', $imageName, 'public');
             }
 
@@ -271,7 +276,6 @@ class BlogsController extends Controller {
 
             $blog->update($data);
 
-            // Categories sync (Eloquent)
             $blog->categories()->sync($request->category_ids ?? []);
 
             // Tags sync (manual query)
@@ -304,17 +308,47 @@ class BlogsController extends Controller {
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Blog $blog)
+    public function destroy($id)
     {
-        // Delete featured image if exists
-        if ($blog->featured_image && Storage::disk('public')->exists($blog->featured_image)) {
-            Storage::disk('public')->delete($blog->featured_image);
+        DB::beginTransaction();
+        try {
+            // ambil blog dari DB
+            $blog = DB::table('blogs')->where('id', $id)->first();
+
+            if (!$blog) {
+                return redirect()->route('admin.blogs.index')
+                    ->with('error', 'Blog not found.');
+            }
+
+            // hapus file featured_image kalau ada
+            if (!empty($blog->featured_image)) {
+                // pastikan path rapi (hilangkan slash depan kalau ada)
+                $imagePath = ltrim($blog->featured_image, '/');
+
+                if (Storage::disk('public')->exists($imagePath)) {
+                    Storage::disk('public')->delete($imagePath);
+                }
+            }
+
+            // hapus relasi tags
+            DB::table('blog_tags')->where('blog_id', $id)->delete();
+
+            // hapus relasi kategori
+            DB::table('blog_category_relationships')->where('blog_id', $id)->delete();
+
+            // hapus blog utama
+            DB::table('blogs')->where('id', $id)->delete();
+
+            DB::commit();
+
+            return redirect()->route('admin.blogs.index')
+                ->with('success', 'Blog deleted successfully.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return redirect()->route('admin.blogs.index')
+                ->with('error', 'Failed to delete blog: ' . $e->getMessage());
         }
-
-        $blog->delete();
-
-        return redirect()->route('admin.blogs.index')
-            ->with('success', 'Blog deleted successfully.');
     }
 
     /**

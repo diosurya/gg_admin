@@ -166,7 +166,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('{blog}/edit', [BlogsController::class, 'edit'])->name('edit');
             Route::put('{blog}', [BlogsController::class, 'update'])->name('update');
             Route::get('{blog}', [BlogsController::class, 'show'])->name('show');
-            Route::delete('{blog}', [BlogsController::class, 'destroy'])->name('destroy');
+             Route::delete('{id}', [BlogsController::class, 'destroy'])->name('destroy');
             
             // Media management
             Route::post('{id}/upload-media', [BlogsController::class, 'uploadMedia'])->name('upload-media');

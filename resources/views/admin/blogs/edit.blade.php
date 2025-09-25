@@ -147,6 +147,45 @@
                     </div>
                 </div>
 
+                {{-- Featured Image --}}
+                <div class="card mt-4">
+                    <div class="card-header"><h5>Featured Image</h5></div>
+                    <div class="card-body">
+                        {{-- Input --}}
+                        <div class="mb-3">
+                            <input type="file" 
+                                class="form-control @error('featured_image') is-invalid @enderror" 
+                                id="featured_image" 
+                                name="featured_image" 
+                                accept="image/*">
+                            <small class="form-text text-muted">
+                                Max size: 2MB. Formats: JPEG, PNG, JPG, GIF
+                            </small>
+                            @error('featured_image')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        {{-- Old Image Preview --}}
+                        @if($blog->featured_image)
+                            <div class="mb-2">
+                                <p class="mb-1">Current Image:</p>
+                                <img src="{{ asset('storage/' . $blog->featured_image) }}" 
+                                    alt="Featured Image" 
+                                    class="img-fluid rounded">
+                            </div>
+                        @endif
+
+                        {{-- New Image Preview --}}
+                        <div id="imagePreview" style="display: none;">
+                            <img id="previewImg" src="" alt="Preview" class="img-fluid rounded">
+                            <button type="button" class="btn btn-sm btn-danger mt-2" onclick="removePreview()">
+                                <i class="fa fa-times"></i> Remove
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 {{-- Categories --}}
                 <div class="card mt-4">
                     <div class="card-header"><h5>Categories</h5></div>
