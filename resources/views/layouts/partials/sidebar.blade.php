@@ -46,8 +46,8 @@
                     <li class="{{ request()->routeIs('admin.product-categories*') ? 'active' : '' }}">
                         <a href="{{ route('admin.product-categories.index') }}">Categories</a>
                     </li>
-                     <li class="{{ request()->routeIs('admin.product-brand*') ? 'active' : '' }}">
-                        <a href="{{ route('admin.product-categories.index') }}">Brands</a>
+                     <li class="{{ request()->routeIs('admin.brands*') ? 'active' : '' }}">
+                        <a href="{{ route('admin.brands.index') }}">Brands</a>
                     </li>
                 </ul>
             </li>
