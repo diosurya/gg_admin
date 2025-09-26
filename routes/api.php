@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\ProductsController;
 use App\Http\Controllers\API\BlogController;
 use App\Http\Controllers\API\TagController;
 use App\Http\Controllers\API\SliderController;
+use App\Http\Controllers\API\ProductController;
 
 Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::post('products/store', [ProductsController::class, 'store']);
@@ -23,4 +24,8 @@ Route::prefix('v1')->group(function () {
 
     Route::get('/tags', [TagController::class, 'index']);
     Route::get('/sliders', [SliderController::class, 'index']);
+
+
+    Route::get('/stores/{storeId}/products', [ProductController::class, 'index']);
+    Route::get('/stores/{storeId}/products/{slug}', [ProductController::class, 'show']);
 });
