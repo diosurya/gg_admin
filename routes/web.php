@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\SeoController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\TagsController;
 use App\Http\Controllers\Admin\PageController;
+use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\SliderController;
 use App\Http\Controllers\Admin\RecommendedProductController;
 
@@ -223,6 +224,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/', [SettingsController::class, 'update'])->name('update');
             Route::get('cache', [SettingsController::class, 'cache'])->name('cache');
             Route::post('cache/clear', [SettingsController::class, 'clearCache'])->name('cache.clear');
+
+             // Profile
+            Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+            Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+            Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
         });
 
         // Reports & Analytics
@@ -257,6 +263,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         
         // Bulk Actions Route
         Route::post('pages/bulk-action', [PageController::class, 'bulkAction'])->name('pages.bulk-action');
+
+       
         
     });
 });

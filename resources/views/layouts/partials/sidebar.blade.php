@@ -70,6 +70,9 @@
                     <li class="{{ request()->routeIs('admin.settings.recommended-products.*') ? 'active' : '' }}">
                         <a href="{{ route('admin.settings.recommended-products.index') }}">Recommended Products</a>
                     </li>
+                    <li class="{{ request()->routeIs('admin.settings.profile.*') ? 'active' : '' }}">
+                        <a href="{{ route('admin.settings.profile.edit') }}">Profile</a>
+                    </li>
                 </ul>
             </li>
 
