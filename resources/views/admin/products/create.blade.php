@@ -287,9 +287,9 @@
                                     </div>
                                 <div class="form-group">
                                     <label>Product Images</label>
-                                    <div class="form-help mb-2">Upload main product images. These will be used across all stores.</div>
+                                    <!-- <div class="form-help mb-2">Upload main product images. These will be used across all stores.</div> -->
                                     
-                                    <div class="row mb-3">
+                                    <!-- <div class="row mb-3">
                                         <div class="col-sm-6">
                                             <label>Store Filter (Optional)</label>
                                             <select id="imageStoreFilter" class="form-control select2">
@@ -300,7 +300,7 @@
                                             </select>
                                             <div class="form-help">Filter images by store (for organization purposes)</div>
                                         </div>
-                                    </div>
+                                    </div> -->
                                     
                                     <div class="dropzone" id="productDropzone">
                                         <div class="dz-message">
@@ -319,7 +319,7 @@
                                             <th>Alt Text</th>
                                             <th>Store Filter</th>
                                             <th>Sort Order</th>
-                                            <th>Is Primary</th>
+                                            <th>Is Cover</th>
                                             <th>Actions</th>
                                         </tr>
                                         </thead>
@@ -793,7 +793,7 @@ $(document).ready(function(){
                     <input type="number" name="images[${index}][sort_order]" class="form-control" value="${index}" min="1">
                 </td>
                 <td>
-                    <input type="radio" name="primary_image" value="${index}" ${index === 1 ? 'checked' : ''}>
+                    <input type="radio" name="is_cover_image" value="${index}" ${index === 1 ? 'checked' : ''}>
                 </td>
                 <td>
                     <button type="button" class="btn btn-sm btn-danger" onclick="removeImageRow(${index})">

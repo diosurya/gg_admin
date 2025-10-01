@@ -166,10 +166,12 @@ class ProductsController extends Controller
         
         $coverProduct = DB::table('product_media')
             ->where('product_id', $id)
-            ->where('is_featured', 1)
+            ->where('is_cover', 1)
             ->orderBy('sort_order')
-            ->orderBy('is_featured', 'desc')
-            ->get();
+            ->orderBy('is_cover', 'desc')
+            ->first();
+
+            // dd($coverProduct);
 
         // Get product stores
         $productStores = DB::table('product_stores as ps')
@@ -223,7 +225,7 @@ class ProductsController extends Controller
         $user = Auth::user();
         $user_id = (string) $user->id;
         try {
-            // Log all incoming data for debugging
+
             Log::info('Product Store Request Data:', [
                 'all_data' => $request->all(),
                 'files' => $request->allFiles(),
@@ -233,7 +235,6 @@ class ProductsController extends Controller
                 'discounts' => $request->input('discounts', [])
             ]);
 
-            // Enhanced validation to include variant images
             $validator = Validator::make($request->all(), [
                 'name' => 'required|string|max:255',
                 'sku' => 'required|string|unique:products,sku',
@@ -262,7 +263,6 @@ class ProductsController extends Controller
                 'meta_keywords' => 'nullable|string',
                 'slug' => 'nullable|string|unique:products,slug',
                 
-                // Validation for variants and their images
                 'variants' => 'nullable|array',
                 'variants.*.type' => 'nullable|string|max:100',
                 'variants.*.color' => 'nullable|string|max:100',
@@ -382,17 +382,20 @@ class ProductsController extends Controller
                 Log::info('Categories attached:', ['categories' => $request->categories]);
             }
 
-            // Handle Main Product Images
+            // Handle Main Product Images (TANPA VARIANT)
             if ($request->has('images') && is_array($request->images)) {
-                $primaryImageIndex = $request->input('primary_image', 0);
+                $coverImageIndex = $request->input('cover_image', 1); // Default index 1
                 
                 foreach ($request->images as $index => $imageData) {
                     if (!empty($imageData['path'])) {
                         $productMediaId = (string) Str::uuid();
+                        $isCover = ($index == $coverImageIndex) ? 1 : 0;
                         
                         // Extract file info from path
                         $filePath = $imageData['path'];
                         $fileName = $imageData['name'] ?? basename($filePath);
+                        $altText = $imageData['alt_text'] ?? '';
+                        $sortOrder = $imageData['sort_order'] ?? $index;
                         $fileSize = 0;
                         $mimeType = 'image/jpeg';
                         
@@ -402,10 +405,11 @@ class ProductsController extends Controller
                             $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
                         }
                         
+                        // Insert to product_media
                         DB::table('product_media')->insert([
                             'id' => $productMediaId,
                             'product_id' => $product->id,
-                            'product_variant_id' => null, // Main product images
+                            'product_variant_id' => null,
                             'image_path' => $filePath,
                             'original_name' => $fileName,
                             'file_name' => basename($filePath),
@@ -413,13 +417,30 @@ class ProductsController extends Controller
                             'file_size' => $fileSize,
                             'mime_type' => $mimeType,
                             'media_type' => 'image',
-                            'sort_order' => $imageData['sort_order'] ?? $index,
-                            'is_primary' => ($index == $primaryImageIndex) ? 1 : 0,
-                            'is_featured' => $request->boolean('is_featured'),
+                            'sort_order' => $sortOrder,
+                            'is_cover' => $isCover, // Changed from is_primary
                             'is_temporary' => 0,
                             'created_at' => now(),
                             'updated_at' => now(),
                         ]);
+                        
+                        // If this is the cover image, also save to products table
+                        if ($isCover) {
+                            DB::table('products')
+                                ->where('id', $product->id)
+                                ->update([
+                                    'cover_image' => $filePath,
+                                    'cover_image_name' => $fileName,
+                                    'cover_image_alt' => $altText,
+                                    'cover_image_sort_order' => $sortOrder,
+                                    'updated_at' => now(),
+                                ]);
+                                
+                            Log::info('Main product cover image set:', [
+                                'product_id' => $product->id,
+                                'cover_image' => $filePath
+                            ]);
+                        }
                     }
                 }
                 
@@ -430,28 +451,34 @@ class ProductsController extends Controller
             if ($request->has('variants') && is_array($request->variants)) {
                 foreach ($request->variants as $variantIndex => $variantData) {
                     $variantId = (string) Str::uuid();
-                    $productMediaId = null;
+                    $coverImagePath = null;
+                    $coverImageName = null;
+                    $coverImageAlt = null;
+                    $coverImageSortOrder = null;
 
-                    // Handle variant images safely
+                    // Handle variant images
                     if (!empty($variantData['images']) && is_array($variantData['images'])) {
-                        $images = array_values($variantData['images']); // pastikan numerik index
+                        $images = array_values($variantData['images']);
 
-                        // ===== First image =====
+                        // First image is the cover for this variant
                         $firstImage = $images[0] ?? null;
                         if ($firstImage && !empty($firstImage['path'])) {
                             $productMediaId = (string) Str::uuid();
 
                             $filePath = $firstImage['path'];
                             $fileName = $firstImage['name'] ?? basename($filePath);
+                            $altText = $firstImage['alt_text'] ?? '';
+                            $sortOrder = $firstImage['sort_order'] ?? 0;
                             $fileSize = 0;
                             $mimeType = 'image/jpeg';
 
-                            // cek file kalau ada di storage
+                            // Check file in storage
                             if (Storage::disk('public')->exists(str_replace('/storage/', '', $filePath))) {
                                 $fileSize = Storage::disk('public')->size(str_replace('/storage/', '', $filePath));
                                 $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
                             }
 
+                            // Insert to product_media with variant_id
                             DB::table('product_media')->insert([
                                 'id' => $productMediaId,
                                 'product_id' => $product->id,
@@ -463,16 +490,22 @@ class ProductsController extends Controller
                                 'file_size' => $fileSize,
                                 'mime_type' => $mimeType,
                                 'media_type' => 'image',
-                                'sort_order' => $firstImage['sort_order'] ?? 0,
-                                'is_primary' => 1,
+                                'sort_order' => $sortOrder,
+                                'is_cover' => 0, // First image is cover
                                 'is_featured' => 0,
                                 'is_temporary' => 0,
                                 'created_at' => now(),
                                 'updated_at' => now(),
                             ]);
+                            
+                            // Store cover image data for variant table
+                            $coverImagePath = $filePath;
+                            $coverImageName = $fileName;
+                            $coverImageAlt = $altText;
+                            $coverImageSortOrder = $sortOrder;
                         }
 
-                        // ===== Additional images =====
+                        // Additional images (not cover)
                         foreach (array_slice($images, 1) as $imageIndex => $imageData) {
                             if (!empty($imageData['path'])) {
                                 $additionalMediaId = (string) Str::uuid();
@@ -499,7 +532,7 @@ class ProductsController extends Controller
                                     'mime_type' => $mimeType,
                                     'media_type' => 'image',
                                     'sort_order' => $imageData['sort_order'] ?? ($imageIndex + 1),
-                                    'is_primary' => 0,
+                                    'is_cover' => 0, // Not a cover image
                                     'is_featured' => 0,
                                     'is_temporary' => 0,
                                     'created_at' => now(),
@@ -507,18 +540,12 @@ class ProductsController extends Controller
                                 ]);
                             }
                         }
-                    } else {
-                        Log::warning('Variant has no valid images', [
-                            'variant_index' => $variantIndex,
-                            'variant_data'  => $variantData
-                        ]);
                     }
 
-                    // ===== Insert variant with product_media_id reference =====
+                    // Insert variant with cover image data
                     DB::table('product_variants')->insert([
                         'id' => $variantId,
                         'product_id' => $product->id,
-                        'product_media_id' => $productMediaId,
                         'store_id' => $variantData['store_id'] ?? null,
                         'type' => $variantData['type'] ?? null,
                         'attribute_name' => $variantData['color'] ?? null,
@@ -526,52 +553,21 @@ class ProductsController extends Controller
                         'sku' => $variantData['sku'] ?? null,
                         'price' => $variantData['price'] ?? $request->price,
                         'stock_quantity' => $variantData['stock_quantity'] ?? 0,
+                        'cover_image' => $coverImagePath,
+                        'cover_image_name' => $coverImageName,
+                        'cover_image_alt' => $coverImageAlt,
+                        'cover_image_sort_order' => $coverImageSortOrder,
                         'status' => 'active',
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
 
-                    Log::info('Variant created:', [
+                    Log::info('Variant created with cover:', [
                         'variant_id' => $variantId,
-                        'variant_index' => $variantIndex,
-                        'product_media_id' => $productMediaId,
-                        'store_id' => $variantData['store_id'] ?? null,
-                        'variant_data' => $variantData
+                        'cover_image' => $coverImagePath
                     ]);
                 }
-
-                Log::info('All variants created:', ['variants_count' => count($request->variants)]);
             }
-
-
-            // Handle Discounts (uncomment if you want to use this)
-            /*
-            if ($request->has('discounts') && is_array($request->discounts)) {
-                $discountsData = [];
-                
-                foreach ($request->discounts as $discountData) {
-                    $discountsData[] = [
-                        'id' => (string) Str::uuid(),
-                        'product_id' => $product->id,
-                        'customer_group_id' => $discountData['customer_group_id'] ?? null,
-                        'quantity' => $discountData['quantity'] ?? 1,
-                        'type' => $discountData['type'] ?? 'percentage',
-                        'value' => $discountData['value'] ?? 0,
-                        'start_date' => $discountData['start_date'] ?? null,
-                        'end_date' => $discountData['end_date'] ?? null,
-                        'status' => 'active',
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
-                }
-                
-                if (!empty($discountsData)) {
-                    DB::table('product_discounts')->insert($discountsData);
-                }
-                
-                Log::info('Discounts created:', ['discounts_count' => count($request->discounts)]);
-            }
-            */
 
             DB::commit();
 
@@ -742,232 +738,6 @@ class ProductsController extends Controller
         return $options;
     }
 
-    // public function store(Request $request)
-    // {
-    //     $request->validate([
-    //         'name' => 'required|string|max:200',
-    //         'slug' => 'required|string|max:200|unique:products,slug',
-    //         'short_description' => 'nullable|string',
-    //         'description' => 'nullable|string',
-    //         'sku' => 'nullable|string|max:100|unique:products,sku',
-    //         'brand_id' => 'nullable|uuid|exists:brands,id',
-    //         'type' => 'required|in:simple,variable,grouped,external,digital',
-    //         'status' => 'required|in:draft,published,archived,out_of_stock',
-    //         'featured' => 'boolean',
-    //         'weight' => 'nullable|numeric|min:0',
-    //         'dimensions_length' => 'nullable|numeric|min:0',
-    //         'dimensions_width' => 'nullable|numeric|min:0',
-    //         'dimensions_height' => 'nullable|numeric|min:0',
-    //         'requires_shipping' => 'boolean',
-    //         'is_digital' => 'boolean',
-    //         'download_limit' => 'nullable|integer|min:1',
-    //         'download_expiry' => 'nullable|integer|min:1',
-    //         'external_url' => 'nullable|url',
-    //         'button_text' => 'nullable|string|max:100',
-    //         'categories' => 'nullable|array',
-    //         'categories.*' => 'uuid|exists:product_categories,id',
-    //         'primary_category' => 'nullable|uuid|exists:product_categories,id',
-    //         'stores' => 'nullable|array',
-    //         'stores.*' => 'uuid|exists:stores,id',
-    //         'tags' => 'nullable|array',
-    //         'tags.*' => 'uuid|exists:tags,id',
-    //         'variants' => 'nullable|array',
-    //         'variants.*.sku' => 'required|string|max:100|unique:product_variants,sku',
-    //         'variants.*.name' => 'nullable|string|max:200',
-    //         'variants.*.attributes' => 'nullable|array',
-    //         'variants.*.stores' => 'nullable|array',
-    //         'images' => 'nullable|array',
-    //         'images.*' => 'image|mimes:jpeg,png,jpg,gif|max:2048',
-    //         'seo' => 'nullable|array',
-    //     ]);
-
-    //     DB::beginTransaction();
-        
-    //     try {
-    //         $productId = Str::uuid();
-
-    //         $data = [
-    //             'id' => $productId,
-    //             'name' => $request->name,
-    //             'slug' => $request->slug,
-    //             'short_description' => $request->short_description,
-    //             'description' => $request->description,
-    //             'sku' => $request->sku,
-    //             'brand_id' => $request->brand_id,
-    //             'type' => $request->type,
-    //             'status' => $request->status,
-    //             'featured' => $request->boolean('featured'),
-    //             'weight' => $request->weight,
-    //             'dimensions_length' => $request->dimensions_length,
-    //             'dimensions_width' => $request->dimensions_width,
-    //             'dimensions_height' => $request->dimensions_height,
-    //             'requires_shipping' => $request->boolean('requires_shipping', true),
-    //             'is_digital' => $request->boolean('is_digital'),
-    //             'download_limit' => $request->download_limit,
-    //             'download_expiry' => $request->download_expiry,
-    //             'external_url' => $request->external_url,
-    //             'button_text' => $request->button_text,
-    //             'created_by' => session('admin_user_id'),
-    //             'created_at' => now(),
-    //             'updated_at' => now(),
-    //         ];
-
-    //         DB::table('products')->insert($data);
-
-    //         // Handle categories
-    //         if ($request->has('categories') && is_array($request->categories)) {
-    //             foreach ($request->categories as $categoryId) {
-    //                 DB::table('product_category_relationships')->insert([
-    //                     'id' => Str::uuid(),
-    //                     'product_id' => $productId,
-    //                     'category_id' => $categoryId,
-    //                     'is_primary' => $categoryId === $request->primary_category,
-    //                     'created_at' => now(),
-    //                 ]);
-    //             }
-    //         }
-
-    //         // Handle store relationships
-    //         if ($request->has('stores') && is_array($request->stores)) {
-    //             foreach ($request->stores as $storeId) {
-    //                 DB::table('product_stores')->insert([
-    //                     'id' => Str::uuid(),
-    //                     'product_id' => $productId,
-    //                     'store_id' => $storeId,
-    //                     'is_active' => true,
-    //                     'created_at' => now(),
-    //                     'updated_at' => now(),
-    //                 ]);
-    //             }
-    //         }
-
-    //         // Handle tags
-    //         if ($request->has('tags') && is_array($request->tags)) {
-    //             foreach ($request->tags as $tagId) {
-    //                 DB::table('product_tags')->insert([
-    //                     'id' => Str::uuid(),
-    //                     'product_id' => $productId,
-    //                     'tag_id' => $tagId,
-    //                     'created_at' => now(),
-    //                 ]);
-    //             }
-    //         }
-
-    //         // Handle variants
-    //         if ($request->has('variants') && is_array($request->variants)) {
-    //             foreach ($request->variants as $index => $variantData) {
-    //                 $variantId = Str::uuid();
-                    
-    //                 DB::table('product_variants')->insert([
-    //                     'id' => $variantId,
-    //                     'product_id' => $productId,
-    //                     'sku' => $variantData['sku'],
-    //                     'name' => $variantData['name'] ?? null,
-    //                     'description' => $variantData['description'] ?? null,
-    //                     'weight' => $variantData['weight'] ?? null,
-    //                     'dimensions_length' => $variantData['dimensions_length'] ?? null,
-    //                     'dimensions_width' => $variantData['dimensions_width'] ?? null,
-    //                     'dimensions_height' => $variantData['dimensions_height'] ?? null,
-    //                     'sort_order' => $index,
-    //                     'status' => 'active',
-    //                     'created_at' => now(),
-    //                     'updated_at' => now(),
-    //                 ]);
-
-    //                 // Handle variant attributes
-    //                 if (isset($variantData['attributes']) && is_array($variantData['attributes'])) {
-    //                     foreach ($variantData['attributes'] as $attrName => $attrValue) {
-    //                         DB::table('variant_attributes')->insert([
-    //                             'id' => Str::uuid(),
-    //                             'variant_id' => $variantId,
-    //                             'attribute_name' => $attrName,
-    //                             'attribute_value' => $attrValue,
-    //                             'created_at' => now(),
-    //                         ]);
-    //                     }
-    //                 }
-
-    //                 // Handle variant store pricing
-    //                 if (isset($variantData['stores']) && is_array($variantData['stores'])) {
-    //                     foreach ($variantData['stores'] as $storeId => $storeData) {
-    //                         DB::table('variant_stores')->insert([
-    //                             'id' => Str::uuid(),
-    //                             'variant_id' => $variantId,
-    //                             'store_id' => $storeId,
-    //                             'price' => $storeData['price'],
-    //                             'sale_price' => $storeData['sale_price'] ?? null,
-    //                             'cost_price' => $storeData['cost_price'] ?? null,
-    //                             'stock_quantity' => $storeData['stock_quantity'] ?? 0,
-    //                             'min_stock_level' => $storeData['min_stock_level'] ?? 0,
-    //                             'max_stock_level' => $storeData['max_stock_level'] ?? null,
-    //                             'manage_stock' => $storeData['manage_stock'] ?? true,
-    //                             'stock_status' => $storeData['stock_status'] ?? 'in_stock',
-    //                             'is_active' => true,
-    //                             'created_at' => now(),
-    //                             'updated_at' => now(),
-    //                         ]);
-    //                     }
-    //                 }
-    //             }
-    //         }
-
-    //         // Handle images
-    //         if ($request->hasFile('images')) {
-    //             foreach ($request->file('images') as $index => $image) {
-    //                 $path = $image->store('products/images', 'public');
-                    
-    //                 DB::table('product_media')->insert([
-    //                     'id' => Str::uuid(),
-    //                     'product_id' => $productId,
-    //                     'file_path' => $path,
-    //                     'file_name' => pathinfo($path, PATHINFO_BASENAME),
-    //                     'original_name' => $image->getClientOriginalName(),
-    //                     'file_type' => $image->getClientOriginalExtension(),
-    //                     'file_size' => $image->getSize(),
-    //                     'mime_type' => $image->getMimeType(),
-    //                     'media_type' => 'image',
-    //                     'sort_order' => $index,
-    //                     'is_featured' => $index === 0,
-    //                     'created_at' => now(),
-    //                     'updated_at' => now(),
-    //                 ]);
-    //             }
-    //         }
-
-    //         // Handle SEO data
-    //         if ($request->has('seo') && is_array($request->seo)) {
-    //             foreach ($request->seo as $storeId => $seoData) {
-    //                 if (empty(array_filter($seoData))) continue;
-
-    //                 DB::table('product_seo')->insert([
-    //                     'id' => Str::uuid(),
-    //                     'product_id' => $productId,
-    //                     'store_id' => $storeId === 'global' ? null : $storeId,
-    //                     'meta_title' => $seoData['meta_title'] ?? null,
-    //                     'meta_description' => $seoData['meta_description'] ?? null,
-    //                     'meta_keywords' => $seoData['meta_keywords'] ?? null,
-    //                     'og_title' => $seoData['og_title'] ?? null,
-    //                     'og_description' => $seoData['og_description'] ?? null,
-    //                     'og_image' => $seoData['og_image'] ?? null,
-    //                     'canonical_url' => $seoData['canonical_url'] ?? null,
-    //                     'robots' => $seoData['robots'] ?? 'index,follow',
-    //                     'created_at' => now(),
-    //                     'updated_at' => now(),
-    //                 ]);
-    //             }
-    //         }
-
-    //         DB::commit();
-
-    //         return redirect()->route('admin.products.index')
-    //             ->with('success', 'Product created successfully!');
-
-    //     } catch (\Exception $e) {
-    //         DB::rollback();
-    //         return back()->withInput()->with('error', 'Failed to create product: ' . $e->getMessage());
-    //     }
-    // }
-
     public function edit($id)
     {
         $product = DB::table('products')
@@ -1118,6 +888,7 @@ class ProductsController extends Controller
                 'new_variants' => $request->input('variants', []),
                 'categories' => $request->input('categories', []),
                 'images' => $request->input('images', []),
+                'primary_image' => $request->input('primary_image'),
                 'removed_items' => [
                     'removed_main_media' => $request->input('removed_main_media', []),
                     'removed_variant_media' => $request->input('removed_variant_media', []),
@@ -1179,6 +950,7 @@ class ProductsController extends Controller
                 'categories.*' => 'exists:product_categories,id',
                 
                 'images' => 'nullable|array',
+                'primary_image' => 'nullable|string',
                 'removed_main_media' => 'nullable|array',
                 'removed_variant_media' => 'nullable|array',
                 'removed_variants' => 'nullable|array',
@@ -1210,8 +982,8 @@ class ProductsController extends Controller
                 }
             }
 
-            // Update main product
-            $product->update([
+            // Prepare product update data
+            $updateData = [
                 'name' => $request->name,
                 'sku' => $request->sku,
                 'slug' => $slug,
@@ -1237,16 +1009,111 @@ class ProductsController extends Controller
                 'meta_description' => $request->meta_description,
                 'meta_keywords' => $request->meta_keywords,
                 'updated_at' => now(),
-            ]);
+            ];
 
+            // Handle main product images (TANPA VARIANT)
+            if ($request->has('images') && is_array($request->images)) {
+                $primaryImageIndex = $request->input('primary_image', 1);
+                
+                // Get the primary/cover image data
+                $coverImage = null;
+                foreach ($request->images as $index => $imageData) {
+                    if ($index == $primaryImageIndex && !empty($imageData['path'])) {
+                        $coverImage = $imageData;
+                        break;
+                    }
+                }
+                
+                // If no cover found, use first image
+                if (!$coverImage && !empty($request->images[1]['path'])) {
+                    $coverImage = $request->images[1];
+                    $primaryImageIndex = 1;
+                }
+                
+                // Update cover image in products table
+                if ($coverImage) {
+                    $updateData['cover_image'] = $coverImage['path'];
+                    $updateData['cover_image_name'] = $coverImage['name'] ?? basename($coverImage['path']);
+                    $updateData['cover_image_alt'] = $coverImage['alt_text'] ?? $request->name;
+                    $updateData['cover_image_sort_order'] = $coverImage['sort_order'] ?? 0;
+                    
+                    Log::info('Main product cover image updated:', [
+                        'product_id' => $product->id,
+                        'cover_image' => $coverImage['path']
+                    ]);
+                }
+                
+                // Delete old main product images (without variant_id)
+                $oldMainMedia = DB::table('product_media')
+                    ->where('product_id', $product->id)
+                    ->whereNull('product_variant_id')
+                    ->get();
+                
+                foreach ($oldMainMedia as $media) {
+                    if ($media->image_path && Storage::disk('public')->exists(str_replace('/storage/', '', $media->image_path))) {
+                        Storage::disk('public')->delete(str_replace('/storage/', '', $media->image_path));
+                    }
+                }
+                
+                DB::table('product_media')
+                    ->where('product_id', $product->id)
+                    ->whereNull('product_variant_id')
+                    ->delete();
+                
+                // Process all main product images for product_media table
+                foreach ($request->images as $index => $imageData) {
+                    if (!empty($imageData['path'])) {
+                        $isCover = ($index == $primaryImageIndex) ? 1 : 0;
+                        
+                        $productMediaId = (string) Str::uuid();
+                        $filePath = $imageData['path'];
+                        $fileName = $imageData['name'] ?? basename($filePath);
+                        $fileSize = 0;
+                        $mimeType = 'image/jpeg';
+                        
+                        if (Storage::disk('public')->exists(str_replace('/storage/', '', $filePath))) {
+                            $fileSize = Storage::disk('public')->size(str_replace('/storage/', '', $filePath));
+                            $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
+                        }
+                        
+                        DB::table('product_media')->insert([
+                            'id' => $productMediaId,
+                            'product_id' => $product->id,
+                            'product_variant_id' => null,
+                            'image_path' => $filePath,
+                            'original_name' => $fileName,
+                            'file_name' => basename($filePath),
+                            'file_type' => pathinfo($filePath, PATHINFO_EXTENSION),
+                            'file_size' => $fileSize,
+                            'mime_type' => $mimeType,
+                            'media_type' => 'image',
+                            'sort_order' => $imageData['sort_order'] ?? $index,
+                            'is_cover' => $isCover,
+                            'is_featured' => 0,
+                            'is_temporary' => 0,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                        
+                        Log::info('Main product image inserted:', [
+                            'media_id' => $productMediaId,
+                            'is_cover' => $isCover,
+                            'index' => $index
+                        ]);
+                    }
+                }
+                
+                Log::info('Main product images processed:', ['images_count' => count($request->images)]);
+            }
+
+            // Update main product
+            $product->update($updateData);
             Log::info('Product updated:', ['product_id' => $product->id]);
 
             // Handle Store Assignments
             if ($request->has('stores') && is_array($request->stores)) {
-                // Remove all existing store assignments
                 ProductStore::where('product_id', $product->id)->delete();
                 
-                // Add new store assignments
                 foreach ($request->stores as $storeUuid => $storeData) {
                     if (!empty($storeData['store_id'])) {
                         ProductStore::create([
@@ -1260,12 +1127,10 @@ class ProductsController extends Controller
 
             // Handle Categories
             if ($request->has('categories')) {
-                // Remove existing category relationships
                 DB::table('product_category_relationships')
                     ->where('product_id', $product->id)
                     ->delete();
                 
-                // Add new category relationships
                 if (is_array($request->categories) && !empty($request->categories)) {
                     $categoriesData = [];
                     foreach (array_unique($request->categories) as $categoryId) {
@@ -1291,16 +1156,14 @@ class ProductsController extends Controller
             if ($request->has('removed_main_media') && is_array($request->removed_main_media)) {
                 foreach ($request->removed_main_media as $mediaId) {
                     $media = DB::table('product_media')->where('id', $mediaId)->first();
-                    if ($media) {
-                        // Delete file from storage
-                        if ($media->image_path && Storage::disk('public')->exists(str_replace('/storage/', '', $media->image_path))) {
+                    if ($media && $media->image_path) {
+                        if (Storage::disk('public')->exists(str_replace('/storage/', '', $media->image_path))) {
                             Storage::disk('public')->delete(str_replace('/storage/', '', $media->image_path));
                         }
-                        // Delete from database
                         DB::table('product_media')->where('id', $mediaId)->delete();
                     }
                 }
-                Log::info('Removed main media:', ['count' => count($request->removed_main_media)]);
+                Log::info('Removed main media from storage');
             }
 
             // Handle removal of variant media
@@ -1308,11 +1171,9 @@ class ProductsController extends Controller
                 foreach ($request->removed_variant_media as $mediaId) {
                     $media = DB::table('product_media')->where('id', $mediaId)->first();
                     if ($media) {
-                        // Delete file from storage
                         if ($media->image_path && Storage::disk('public')->exists(str_replace('/storage/', '', $media->image_path))) {
                             Storage::disk('public')->delete(str_replace('/storage/', '', $media->image_path));
                         }
-                        // Delete from database
                         DB::table('product_media')->where('id', $mediaId)->delete();
                     }
                 }
@@ -1322,7 +1183,6 @@ class ProductsController extends Controller
             // Handle removal of variants
             if ($request->has('removed_variants') && is_array($request->removed_variants)) {
                 foreach ($request->removed_variants as $variantId) {
-                    // Delete variant media first
                     $variantMedia = DB::table('product_media')
                         ->where('product_variant_id', $variantId)
                         ->get();
@@ -1333,83 +1193,83 @@ class ProductsController extends Controller
                         }
                     }
                     
-                    // Delete variant media records
                     DB::table('product_media')->where('product_variant_id', $variantId)->delete();
-                    
-                    // Delete variant
                     DB::table('product_variants')->where('id', $variantId)->delete();
                 }
                 Log::info('Removed variants:', ['count' => count($request->removed_variants)]);
             }
 
-            // Handle new main product images
-            if ($request->has('images') && is_array($request->images)) {
-                $primaryImageIndex = $request->input('primary_image', 0);
-                
-                foreach ($request->images as $index => $imageData) {
-                    if (!empty($imageData['path'])) {
-                        $productMediaId = (string) Str::uuid();
-                        
-                        // Extract file info from path
-                        $filePath = $imageData['path'];
-                        $fileName = $imageData['name'] ?? basename($filePath);
-                        $fileSize = 0;
-                        $mimeType = 'image/jpeg';
-                        
-                        // Try to get file info if it exists
-                        if (Storage::disk('public')->exists(str_replace('/storage/', '', $filePath))) {
-                            $fileSize = Storage::disk('public')->size(str_replace('/storage/', '', $filePath));
-                            $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
-                        }
-                        
-                        DB::table('product_media')->insert([
-                            'id' => $productMediaId,
-                            'product_id' => $product->id,
-                            'product_variant_id' => null,
-                            'image_path' => $filePath,
-                            'original_name' => $fileName,
-                            'file_name' => basename($filePath),
-                            'file_type' => pathinfo($filePath, PATHINFO_EXTENSION),
-                            'file_size' => $fileSize,
-                            'mime_type' => $mimeType,
-                            'media_type' => 'image',
-                            'sort_order' => $imageData['sort_order'] ?? $index,
-                            'is_primary' => ($index == $primaryImageIndex) ? 1 : 0,
-                            'is_featured' => $product->is_featured,
-                            'is_temporary' => 0,
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]);
-                    }
-                }
-                
-                Log::info('New main product images added:', ['images_count' => count($request->images)]);
-            }
-
-            // Handle existing variants updates
+            // Handle existing variants updates (DENGAN COVER IMAGE)
             if ($request->has('existing_variants') && is_array($request->existing_variants)) {
                 foreach ($request->existing_variants as $variantId => $variantData) {
-                    // Update existing variant
-                    DB::table('product_variants')
-                        ->where('id', $variantId)
-                        ->update([
-                            'store_id' => $variantData['store_id'] ?? null,
-                            'type' => $variantData['type'] ?? null,
-                            'attribute_name' => $variantData['color'] ?? null,
-                            'attribute_value' => $variantData['value'] ?? null,
-                            'sku' => $variantData['sku'] ?? null,
-                            'price' => $variantData['price'] ?? $product->price,
-                            'sale_price' => $variantData['sale_price'] ?? null,
-                            'stock_quantity' => $variantData['stock_quantity'] ?? 0,
-                            'updated_at' => now(),
-                        ]);
-
-                    // Handle new images for existing variants
+                    $coverImagePath = null;
+                    $coverImageName = null;
+                    $coverImageAlt = null;
+                    $coverImageSortOrder = null;
+                    
+                    // Check if variant has new images
                     if (!empty($variantData['new_images']) && is_array($variantData['new_images'])) {
-                        foreach ($variantData['new_images'] as $imageIndex => $imageData) {
+                        // Delete old variant images first
+                        $oldVariantMedia = DB::table('product_media')
+                            ->where('product_variant_id', $variantId)
+                            ->get();
+                        
+                        foreach ($oldVariantMedia as $media) {
+                            if ($media->image_path && Storage::disk('public')->exists(str_replace('/storage/', '', $media->image_path))) {
+                                Storage::disk('public')->delete(str_replace('/storage/', '', $media->image_path));
+                            }
+                        }
+                        
+                        DB::table('product_media')
+                            ->where('product_variant_id', $variantId)
+                            ->delete();
+                        
+                        $images = array_values($variantData['new_images']);
+                        
+                        // First new image becomes the cover
+                        $firstImage = $images[0] ?? null;
+                        if ($firstImage && !empty($firstImage['path'])) {
+                            $coverImagePath = $firstImage['path'];
+                            $coverImageName = $firstImage['name'] ?? basename($firstImage['path']);
+                            $coverImageAlt = $firstImage['alt_text'] ?? '';
+                            $coverImageSortOrder = $firstImage['sort_order'] ?? 0;
+                            
+                            // Insert first image as cover
+                            $productMediaId = (string) Str::uuid();
+                            $filePath = $firstImage['path'];
+                            $fileName = $firstImage['name'] ?? basename($filePath);
+                            $fileSize = 0;
+                            $mimeType = 'image/jpeg';
+                            
+                            if (Storage::disk('public')->exists(str_replace('/storage/', '', $filePath))) {
+                                $fileSize = Storage::disk('public')->size(str_replace('/storage/', '', $filePath));
+                                $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
+                            }
+                            
+                            DB::table('product_media')->insert([
+                                'id' => $productMediaId,
+                                'product_id' => $product->id,
+                                'product_variant_id' => $variantId,
+                                'image_path' => $filePath,
+                                'original_name' => $fileName,
+                                'file_name' => basename($filePath),
+                                'file_type' => pathinfo($filePath, PATHINFO_EXTENSION),
+                                'file_size' => $fileSize,
+                                'mime_type' => $mimeType,
+                                'media_type' => 'image',
+                                'sort_order' => $coverImageSortOrder,
+                                'is_cover' => 1, // First image is cover
+                                'is_featured' => 0,
+                                'is_temporary' => 0,
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+                        }
+                        
+                        // Process additional images (not cover)
+                        foreach (array_slice($images, 1) as $imageIndex => $imageData) {
                             if (!empty($imageData['path'])) {
-                                $productMediaId = (string) Str::uuid();
-                                
+                                $additionalMediaId = (string) Str::uuid();
                                 $filePath = $imageData['path'];
                                 $fileName = $imageData['name'] ?? basename($filePath);
                                 $fileSize = 0;
@@ -1421,7 +1281,7 @@ class ProductsController extends Controller
                                 }
                                 
                                 DB::table('product_media')->insert([
-                                    'id' => $productMediaId,
+                                    'id' => $additionalMediaId,
                                     'product_id' => $product->id,
                                     'product_variant_id' => $variantId,
                                     'image_path' => $filePath,
@@ -1431,8 +1291,8 @@ class ProductsController extends Controller
                                     'file_size' => $fileSize,
                                     'mime_type' => $mimeType,
                                     'media_type' => 'image',
-                                    'sort_order' => $imageData['sort_order'] ?? $imageIndex,
-                                    'is_primary' => $imageIndex === 0 ? 1 : 0,
+                                    'sort_order' => $imageData['sort_order'] ?? ($imageIndex + 1),
+                                    'is_cover' => 0, // Not a cover
                                     'is_featured' => 0,
                                     'is_temporary' => 0,
                                     'created_at' => now(),
@@ -1441,31 +1301,59 @@ class ProductsController extends Controller
                             }
                         }
                     }
+                    
+                    // Update variant with cover image data
+                    $variantUpdate = [
+                        'store_id' => $variantData['store_id'] ?? null,
+                        'type' => $variantData['type'] ?? null,
+                        'attribute_name' => $variantData['color'] ?? null,
+                        'attribute_value' => $variantData['value'] ?? null,
+                        'sku' => $variantData['sku'] ?? null,
+                        'price' => $variantData['price'] ?? null,
+                        'sale_price' => $variantData['sale_price'] ?? null,
+                        'stock_quantity' => $variantData['stock_quantity'] ?? 0,
+                        'updated_at' => now(),
+                    ];
+                    
+                    // Only update cover if we have new cover image
+                    if ($coverImagePath) {
+                        $variantUpdate['cover_image'] = $coverImagePath;
+                        $variantUpdate['cover_image_name'] = $coverImageName;
+                        $variantUpdate['cover_image_alt'] = $coverImageAlt;
+                        $variantUpdate['cover_image_sort_order'] = $coverImageSortOrder;
+                    }
+                    
+                    DB::table('product_variants')
+                        ->where('id', $variantId)
+                        ->update($variantUpdate);
 
                     Log::info('Existing variant updated:', [
                         'variant_id' => $variantId,
-                        'new_images_count' => count($variantData['new_images'] ?? [])
+                        'new_images_count' => count($variantData['new_images'] ?? []),
+                        'cover_updated' => !empty($coverImagePath)
                     ]);
                 }
                 
                 Log::info('All existing variants updated:', ['variants_count' => count($request->existing_variants)]);
             }
 
-            // Handle new variants
+            // Handle new variants (DENGAN COVER IMAGE)
             if ($request->has('variants') && is_array($request->variants)) {
                 foreach ($request->variants as $variantIndex => $variantData) {
                     $variantId = (string) Str::uuid();
-                    $productMediaId = null;
+                    $coverImagePath = null;
+                    $coverImageName = null;
+                    $coverImageAlt = null;
+                    $coverImageSortOrder = null;
 
                     // Handle variant images
                     if (!empty($variantData['images']) && is_array($variantData['images'])) {
                         $images = array_values($variantData['images']);
 
-                        // First image
+                        // First image is the cover
                         $firstImage = $images[0] ?? null;
                         if ($firstImage && !empty($firstImage['path'])) {
                             $productMediaId = (string) Str::uuid();
-
                             $filePath = $firstImage['path'];
                             $fileName = $firstImage['name'] ?? basename($filePath);
                             $fileSize = 0;
@@ -1475,6 +1363,12 @@ class ProductsController extends Controller
                                 $fileSize = Storage::disk('public')->size(str_replace('/storage/', '', $filePath));
                                 $mimeType = Storage::disk('public')->mimeType(str_replace('/storage/', '', $filePath)) ?? 'image/jpeg';
                             }
+
+                            // Store cover data
+                            $coverImagePath = $filePath;
+                            $coverImageName = $fileName;
+                            $coverImageAlt = $firstImage['alt_text'] ?? '';
+                            $coverImageSortOrder = $firstImage['sort_order'] ?? 0;
 
                             DB::table('product_media')->insert([
                                 'id' => $productMediaId,
@@ -1487,8 +1381,8 @@ class ProductsController extends Controller
                                 'file_size' => $fileSize,
                                 'mime_type' => $mimeType,
                                 'media_type' => 'image',
-                                'sort_order' => $firstImage['sort_order'] ?? 0,
-                                'is_primary' => 1,
+                                'sort_order' => $coverImageSortOrder,
+                                'is_cover' => 0, // First image is cover
                                 'is_featured' => 0,
                                 'is_temporary' => 0,
                                 'created_at' => now(),
@@ -1500,7 +1394,6 @@ class ProductsController extends Controller
                         foreach (array_slice($images, 1) as $imageIndex => $imageData) {
                             if (!empty($imageData['path'])) {
                                 $additionalMediaId = (string) Str::uuid();
-
                                 $filePath = $imageData['path'];
                                 $fileName = $imageData['name'] ?? basename($filePath);
                                 $fileSize = 0;
@@ -1523,7 +1416,7 @@ class ProductsController extends Controller
                                     'mime_type' => $mimeType,
                                     'media_type' => 'image',
                                     'sort_order' => $imageData['sort_order'] ?? ($imageIndex + 1),
-                                    'is_primary' => 0,
+                                    'is_cover' => 0,
                                     'is_featured' => 0,
                                     'is_temporary' => 0,
                                     'created_at' => now(),
@@ -1533,11 +1426,10 @@ class ProductsController extends Controller
                         }
                     }
 
-                    // Insert new variant
+                    // Insert new variant with cover image data
                     DB::table('product_variants')->insert([
                         'id' => $variantId,
                         'product_id' => $product->id,
-                        'product_media_id' => $productMediaId,
                         'store_id' => $variantData['store_id'] ?? null,
                         'type' => $variantData['type'] ?? null,
                         'attribute_name' => $variantData['color'] ?? null,
@@ -1546,6 +1438,10 @@ class ProductsController extends Controller
                         'price' => $variantData['price'] ?? $product->price,
                         'sale_price' => $variantData['sale_price'] ?? null,
                         'stock_quantity' => $variantData['stock_quantity'] ?? 0,
+                        'cover_image' => $coverImagePath,
+                        'cover_image_name' => $coverImageName,
+                        'cover_image_alt' => $coverImageAlt,
+                        'cover_image_sort_order' => $coverImageSortOrder,
                         'status' => 'active',
                         'created_at' => now(),
                         'updated_at' => now(),
@@ -1554,7 +1450,7 @@ class ProductsController extends Controller
                     Log::info('New variant created:', [
                         'variant_id' => $variantId,
                         'variant_index' => $variantIndex,
-                        'product_media_id' => $productMediaId,
+                        'cover_image' => $coverImagePath,
                         'images_count' => count($variantData['images'] ?? [])
                     ]);
                 }
@@ -1570,47 +1466,22 @@ class ProductsController extends Controller
                 'data' => [
                     'product_id' => $product->id,
                     'product_name' => $product->name,
+                    'cover_image' => $product->cover_image,
                     'redirect_url' => route('admin.products.show', $product->id)
-                ],
-                'debug_info' => [
-                    'processed_data' => [
-                        'updated_product' => true,
-                        'categories_count' => count($request->input('categories', [])),
-                        'existing_variants_count' => count($request->input('existing_variants', [])),
-                        'new_variants_count' => count($request->input('variants', [])),
-                        'new_main_images_count' => count($request->input('images', [])),
-                        'removed_main_media_count' => count($request->input('removed_main_media', [])),
-                        'removed_variant_media_count' => count($request->input('removed_variant_media', [])),
-                        'removed_variants_count' => count($request->input('removed_variants', []))
-                    ]
                 ]
             ]);
 
-        } catch (Exception $e) {
-            DB::rollback();
+        } catch (\Exception $e) {
+            DB::rollBack();
             
-            Log::error('Product update failed:', [
-                'product_id' => $id,
+            Log::error('Product Update Error:', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'request_data' => $request->all()
+                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to update product: ' . $e->getMessage(),
-                'debug_info' => [
-                    'error_details' => $e->getMessage(),
-                    'product_id' => $id,
-                    'request_summary' => [
-                        'name' => $request->input('name'),
-                        'sku' => $request->input('sku'),
-                        'existing_variants_count' => count($request->input('existing_variants', [])),
-                        'new_variants_count' => count($request->input('variants', [])),
-                        'categories_count' => count($request->input('categories', [])),
-                        'new_main_images_count' => count($request->input('images', [])),
-                    ]
-                ]
+                'message' => 'Failed to update product: ' . $e->getMessage()
             ], 500);
         }
     }

@@ -221,11 +221,10 @@
                     <div class="row">
                         <div class="col-md-3">
                           @php
-                                $featured = $media->where('is_featured', 1)->first();
-                                $imageUrl = $featured ? url($featured->image_path) : null;
+                                $imageUrl = $coverProduct ? url($coverProduct->image_path) : null;
                             @endphp
 
-                            @if($featured && $imageUrl)
+                            @if($imageUrl)
                                 <img src="{{ $imageUrl }}" 
                                     class="img-thumbnail" 
                                     alt="{{ $product->name }}" 
@@ -289,24 +288,7 @@
             </div>
             @endif
 
-            {{-- Categories --}}
-            @if($categories->count() > 0)
-            <div class="product-detail-card">
-                <div class="card-header">
-                    <i class="fa fa-folder"></i> Categories
-                </div>
-                <div class="card-body">
-                    @foreach($categories as $category)
-                        <span class="category-tag {{ $category->is_primary ? 'primary' : '' }}">
-                            {{ $category->name }}
-                            @if($category->is_primary)
-                                <small>(Primary)</small>
-                            @endif
-                        </span>
-                    @endforeach
-                </div>
-            </div>
-            @endif
+           
 
             {{-- Tags --}}
             @if($tags->count() > 0)
@@ -322,31 +304,7 @@
             </div>
             @endif
 
-            {{-- Product Images Gallery --}}
-            @if($media->count() > 0)
-            <div class="product-detail-card">
-                <div class="card-header">
-                    <i class="fa fa-images"></i> Product Images ({{ $media->count() }})
-                </div>
-                <div class="card-body">
-                    <div class="product-gallery">
-                        @foreach($media as $image)
-                            @php
-                                // pastikan ada base url penuh
-                                $imageUrl = url($image->image_path);
-                                $altText = $image->alt_text ?? $product->name;
-                            @endphp
-
-                            <img src="{{ $imageUrl }}"
-                                alt="{{ $altText }}"
-                                title="{{ $altText }}"
-                                onclick="showImageModal('{{ $imageUrl }}', '{{ $altText }}')">
-                        @endforeach
-                    </div>
-                </div>
-            </div>
-            @endif
-
+           
             {{-- Product Variants --}}
             @if($variants->count() > 0)
             <div class="row">
@@ -359,7 +317,21 @@
                             @foreach($variants as $variant)
                             <div class="variant-card">
                                 <div class="row">
-                                    <div class="col-md-6">
+                                    <div class="col-md-3">
+                                        @php
+                                            $imageUrlVariant = $variant->cover_image ? url($variant->cover_image) : null;
+                                        @endphp
+
+                                         @if($imageUrl)
+                                            <img src="{{ $imageUrlVariant }}" 
+                                                class="img-thumbnail">
+                                        @else
+                                            <div class="product-image d-flex align-items-center justify-content-center bg-light">
+                                                <i class="fa fa-image fa-3x text-muted"></i>
+                                            </div>
+                                        @endif
+                                    </div>
+                                    <div class="col-md-3">
                                         <h5>{{ $variant->name ?? 'Variant #' . $loop->iteration }}</h5>
                                         <p class="mb-1"><strong>SKU:</strong> {{ $variant->sku }}</p>
                                         
@@ -432,6 +404,25 @@
                     @endif
                 </div>
             </div>
+
+            {{-- Categories --}}
+            @if($categories->count() > 0)
+            <div class="product-detail-card">
+                <div class="card-header">
+                    <i class="fa fa-folder"></i> Categories
+                </div>
+                <div class="card-body">
+                    @foreach($categories as $category)
+                        <span class="category-tag {{ $category->is_primary ? 'primary' : '' }}">
+                            {{ $category->name }}
+                            @if($category->is_primary)
+                                <small>(Primary)</small>
+                            @endif
+                        </span>
+                    @endforeach
+                </div>
+            </div>
+            @endif
             
             {{-- Pricing Information --}}
             <div class="product-detail-card">
@@ -457,6 +448,32 @@
                     @endif
                 </div>
             </div>
+
+             {{-- Product Images Gallery --}}
+            @if($media->count() > 0)
+            <div class="product-detail-card">
+                <div class="card-header">
+                    <i class="fa fa-images"></i> Product Images ({{ $media->count() }})
+                </div>
+                <div class="card-body">
+                    <div class="product-gallery">
+                        @foreach($media as $image)
+                            @php
+                                // pastikan ada base url penuh
+                                $imageUrl = url($image->image_path);
+                                $altText = $image->alt_text ?? $product->name;
+                            @endphp
+
+                            <img src="{{ $imageUrl }}"
+                                alt="{{ $altText }}"
+                                title="{{ $altText }}"
+                                onclick="showImageModal('{{ $imageUrl }}', '{{ $altText }}')">
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+            @endif
+
 
             {{-- Stock & Settings --}}
             <div class="product-detail-card">
