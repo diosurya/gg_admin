@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ProductCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -114,8 +115,13 @@ class ProductCategoriesController extends Controller
 
     public function create()
     {
-        $parents = DB::table('product_categories')->whereNull('deleted_at')->pluck('name', 'id');
-        return view('admin.product_categories.create', compact('parents'));
+        $parentCategories = DB::table('product_categories')
+            ->whereNull('deleted_at')
+            ->whereNull('parent_id')
+            ->orderBy('name')
+            ->get();
+
+        return view('admin.product_categories.create', compact('parentCategories'));
     }
 
     public function reorder(Request $request)
@@ -168,109 +174,114 @@ class ProductCategoriesController extends Controller
         return $options;
     }
 
+
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:100',
-            'slug' => 'required|string|max:100|unique:product_categories,slug',
+            'name' => 'required|string|max:255',
+            'slug' => 'nullable|string|max:255|unique:product_categories,slug',
             'description' => 'nullable|string',
-            'parent_id' => 'nullable|uuid|exists:product_categories,id',
-            'sort_order' => 'nullable|integer|min:0',
-            'color' => 'nullable|string|size:7|regex:/^#[a-fA-F0-9]{6}$/',
-            'icon' => 'nullable|string|max:100',
-            'is_featured' => 'boolean',
-            'show_in_menu' => 'boolean',
+            'parent_id' => 'nullable|exists:product_categories,id',
+            'sort_order' => 'nullable|integer',
+            'color' => 'nullable|string|max:7',
             'status' => 'required|in:active,inactive',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
-            'banner' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:4096',
-            'seo' => 'nullable|array',
-            'seo.*.meta_title' => 'nullable|string|max:70',
-            'seo.*.meta_description' => 'nullable|string|max:160',
-            'seo.*.meta_keywords' => 'nullable|string|max:255',
+            'image' => 'nullable|image|max:2048',
+            'banner' => 'nullable|image|max:2048',
+            'icon' => 'nullable|image|max:1024',
+            'media.*' => 'nullable|image|max:2048'
         ]);
 
         DB::beginTransaction();
-        
         try {
+            // Generate slug if empty
+            $slug = $request->slug ?: Str::slug($request->name);
+
             // Calculate level and path
             $level = 0;
-            $path = '';
-            
+            $path = $slug;
             if ($request->parent_id) {
-                $parent = DB::table('product_categories')
-                    ->where('id', $request->parent_id)
-                    ->first();
-                
-                if ($parent) {
-                    $level = $parent->level + 1;
-                    $path = $parent->path ? $parent->path . '/' . $request->parent_id : $request->parent_id;
-                }
+                $parent = DB::table('product_categories')->find($request->parent_id);
+                $level = $parent->level + 1;
+                $path = $parent->path . '/' . $slug;
             }
 
-            $categoryId = Str::uuid();
+            // Upload main images
+            $imagePath = null;
+            $bannerPath = null;
+            $iconPath = null;
 
-            $data = [
+            if ($request->hasFile('image')) {
+                $imagePath = $request->file('image')->store('categories/images', 'public');
+            }
+            if ($request->hasFile('banner')) {
+                $bannerPath = $request->file('banner')->store('categories/banners', 'public');
+            }
+            if ($request->hasFile('icon')) {
+                $iconPath = $request->file('icon')->store('categories/icons', 'public');
+            }
+
+            // Generate UUID for category ID
+            $categoryId = (string) Str::uuid();
+
+            // Insert category
+            DB::table('product_categories')->insert([
                 'id' => $categoryId,
                 'name' => $request->name,
-                'slug' => $request->slug,
+                'slug' => $slug,
                 'description' => $request->description,
+                'image' => $imagePath,
+                'banner' => $bannerPath,
+                'icon' => $iconPath,
+                'color' => $request->color,
                 'parent_id' => $request->parent_id,
-                'sort_order' => $request->sort_order ?: 0,
+                'sort_order' => $request->sort_order ?? 0,
                 'level' => $level,
                 'path' => $path,
-                'color' => $request->color,
-                'icon' => $request->icon,
-                'is_featured' => $request->boolean('is_featured'),
-                'show_in_menu' => $request->boolean('show_in_menu', true),
+                'is_featured' => $request->has('is_featured') ? 1 : 0,
+                'show_in_menu' => $request->has('show_in_menu') ? 1 : 0,
+                'products_count' => 0,
                 'status' => $request->status,
                 'created_at' => now(),
-                'updated_at' => now(),
-            ];
+                'updated_at' => now()
+            ]);
 
-            // Handle file uploads
-            if ($request->hasFile('image')) {
-                $data['image'] = $request->file('image')->store('categories/images', 'public');
-            }
+            // Upload media gallery
+            if ($request->hasFile('media')) {
+                $sortOrder = 1;
+                foreach ($request->file('media') as $file) {
+                    $filePath = $file->store('categories/media', 'public');
 
-            if ($request->hasFile('banner')) {
-                $data['banner'] = $request->file('banner')->store('categories/banners', 'public');
-            }
-
-            DB::table('product_categories')->insert($data);
-
-            // Handle SEO data
-            if ($request->has('seo') && is_array($request->seo)) {
-                foreach ($request->seo as $storeId => $seoData) {
-                    if (empty(array_filter($seoData))) continue;
-
-                    DB::table('product_category_seo')->insert([
-                        'id' => Str::uuid(),
+                    DB::table('product_category_media')->insert([
+                        'id' => (string) Str::uuid(), // kalau pakai UUID juga
                         'category_id' => $categoryId,
-                        'store_id' => $storeId === 'global' ? null : $storeId,
-                        'meta_title' => $seoData['meta_title'] ?? null,
-                        'meta_description' => $seoData['meta_description'] ?? null,
-                        'meta_keywords' => $seoData['meta_keywords'] ?? null,
+                        'file_path' => $filePath,
+                        'file_name' => $file->hashName(),
+                        'original_name' => $file->getClientOriginalName(),
+                        'file_type' => $file->extension(),
+                        'file_size' => $file->getSize(),
+                        'mime_type' => $file->getMimeType(),
+                        'media_type' => 'image',
+                        'sort_order' => $sortOrder++,
+                        'is_featured' => 0,
                         'created_at' => now(),
-                        'updated_at' => now(),
+                        'updated_at' => now()
                     ]);
                 }
             }
 
             DB::commit();
-
             return redirect()->route('admin.product-categories.index')
-                ->with('success', 'Category created successfully!');
-
+                ->with('success', 'Category created successfully');
         } catch (\Exception $e) {
-            DB::rollback();
+            DB::rollBack();
             return back()->withInput()->with('error', 'Failed to create category: ' . $e->getMessage());
         }
     }
 
+
     public function edit($id)
     {
-        $category = DB::table('product_categories')
-            ->where('id', $id)
+        $category = ProductCategory::where('id', $id)
             ->whereNull('deleted_at')
             ->first();
 
@@ -279,148 +290,147 @@ class ProductCategoriesController extends Controller
                 ->with('error', 'Category not found!');
         }
 
-        // Get parent categories (exclude self and children)
-        $parentCategories = $this->getFlatCategoriesForDropdown($id);
+        $parentCategories = ProductCategory::whereNull('deleted_at')
+            ->where('id', '!=', $id)
+            ->orderBy('name')
+            ->get();
 
-        // Get SEO data
         $seoData = DB::table('product_category_seo')
             ->where('category_id', $id)
             ->get()
-            ->keyBy('store_id');
+            ->keyBy(function ($item) {
+                return $item->store_id ?? 'global';
+            });
 
-        // Get available stores for SEO
-        $stores = DB::table('stores')
-            ->select('id', 'name')
-            ->where('status', 'active')
-            ->whereNull('deleted_at')
+        $media = DB::table('product_category_media')
+            ->where('category_id', $id)
             ->get();
 
-        return view('admin.product-categories.edit', compact('category', 'parentCategories', 'seoData', 'stores'));
+        return view('admin.product_categories.edit', compact(
+            'category',
+            'parentCategories',
+            'seoData',
+            'media'
+        ));
     }
+
+
 
     public function update(Request $request, $id)
     {
-        $category = DB::table('product_categories')
-            ->where('id', $id)
-            ->whereNull('deleted_at')
-            ->first();
-
-        if (!$category) {
-            return redirect()->route('admin.product-categories.index')
-                ->with('error', 'Category not found!');
-        }
-
         $request->validate([
-            'name' => 'required|string|max:100',
-            'slug' => 'required|string|max:100|unique:product_categories,slug,' . $id . ',id',
+            'name' => 'required|string|max:255',
+            'slug' => 'nullable|string|max:255|unique:product_categories,slug,' . $id,
             'description' => 'nullable|string',
-            'parent_id' => 'nullable|uuid|exists:product_categories,id|not_in:' . $id,
-            'sort_order' => 'nullable|integer|min:0',
-            'color' => 'nullable|string|size:7|regex:/^#[a-fA-F0-9]{6}$/',
-            'icon' => 'nullable|string|max:100',
-            'is_featured' => 'boolean',
-            'show_in_menu' => 'boolean',
+            'parent_id' => 'nullable|exists:product_categories,id',
+            'sort_order' => 'nullable|integer',
+            'color' => 'nullable|string|max:7',
             'status' => 'required|in:active,inactive',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
-            'banner' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:4096',
-            'seo' => 'nullable|array',
-            'seo.*.meta_title' => 'nullable|string|max:70',
-            'seo.*.meta_description' => 'nullable|string|max:160',
-            'seo.*.meta_keywords' => 'nullable|string|max:255',
+            'image' => 'nullable|image|max:2048',
+            'banner' => 'nullable|image|max:2048',
+            'icon' => 'nullable|image|max:1024',
+            'media.*' => 'nullable|image|max:2048'
         ]);
 
         DB::beginTransaction();
-        
         try {
-            // Calculate level and path
+            $category = DB::table('product_categories')->where('id',$id)->first();
+            if (!$category) return redirect()->back()->with('error','Category not found');
+
+            $slug = $request->slug ?: Str::slug($request->name);
+
+            // level & path
             $level = 0;
-            $path = '';
-            
+            $path = $slug;
             if ($request->parent_id) {
-                $parent = DB::table('product_categories')
-                    ->where('id', $request->parent_id)
-                    ->first();
-                
-                if ($parent) {
-                    $level = $parent->level + 1;
-                    $path = $parent->path ? $parent->path . '/' . $request->parent_id : $request->parent_id;
-                }
+                $parent = DB::table('product_categories')->find($request->parent_id);
+                $level = $parent->level + 1;
+                $path = $parent->path . '/' . $slug;
             }
 
             $data = [
                 'name' => $request->name,
-                'slug' => $request->slug,
+                'slug' => $slug,
                 'description' => $request->description,
+                'color' => $request->color,
                 'parent_id' => $request->parent_id,
-                'sort_order' => $request->sort_order ?: 0,
+                'sort_order' => $request->sort_order ?? 0,
                 'level' => $level,
                 'path' => $path,
-                'color' => $request->color,
-                'icon' => $request->icon,
-                'is_featured' => $request->boolean('is_featured'),
-                'show_in_menu' => $request->boolean('show_in_menu', true),
+                'is_featured' => $request->has('is_featured') ? 1 : 0,
+                'show_in_menu' => $request->has('show_in_menu') ? 1 : 0,
                 'status' => $request->status,
-                'updated_at' => now(),
+                'updated_at' => now()
             ];
 
-            // Handle file uploads
-            if ($request->hasFile('image')) {
-                if ($category->image) {
-                    Storage::disk('public')->delete($category->image);
-                }
-                $data['image'] = $request->file('image')->store('categories/images', 'public');
+            // Replace/remove image
+            if ($request->has('remove_image') && $category->image) {
+                Storage::disk('public')->delete($category->image);
+                $data['image'] = null;
+            } elseif ($request->hasFile('image')) {
+                if ($category->image) Storage::disk('public')->delete($category->image);
+                $data['image'] = $request->file('image')->store('categories/images','public');
             }
 
-            if ($request->hasFile('banner')) {
-                if ($category->banner) {
-                    Storage::disk('public')->delete($category->banner);
-                }
-                $data['banner'] = $request->file('banner')->store('categories/banners', 'public');
+            if ($request->has('remove_banner') && $category->banner) {
+                Storage::disk('public')->delete($category->banner);
+                $data['banner'] = null;
+            } elseif ($request->hasFile('banner')) {
+                if ($category->banner) Storage::disk('public')->delete($category->banner);
+                $data['banner'] = $request->file('banner')->store('categories/banners','public');
             }
 
-            DB::table('product_categories')
-                ->where('id', $id)
-                ->update($data);
+            if ($request->has('remove_icon') && $category->icon) {
+                Storage::disk('public')->delete($category->icon);
+                $data['icon'] = null;
+            } elseif ($request->hasFile('icon')) {
+                if ($category->icon) Storage::disk('public')->delete($category->icon);
+                $data['icon'] = $request->file('icon')->store('categories/icons','public');
+            }
 
-            // Update SEO data
-            if ($request->has('seo') && is_array($request->seo)) {
-                // Delete existing SEO data
-                DB::table('product_category_seo')
-                    ->where('category_id', $id)
-                    ->delete();
+            DB::table('product_categories')->where('id',$id)->update($data);
 
-                // Insert new SEO data
-                foreach ($request->seo as $storeId => $seoData) {
-                    if (empty(array_filter($seoData))) continue;
+            // Remove selected media
+            if ($request->filled('remove_media')) {
+                $removeIds = $request->remove_media;
+                $mediaFiles = DB::table('product_category_media')->whereIn('id',$removeIds)->get();
+                foreach ($mediaFiles as $m) {
+                    Storage::disk('public')->delete($m->file_path);
+                }
+                DB::table('product_category_media')->whereIn('id',$removeIds)->delete();
+            }
 
-                    DB::table('product_category_seo')->insert([
-                        'id' => Str::uuid(),
+            // Add new media
+            if ($request->hasFile('media')) {
+                $sortOrder = DB::table('product_category_media')->where('category_id',$id)->max('sort_order') + 1;
+                foreach ($request->file('media') as $file) {
+                    $filePath = $file->store('categories/media','public');
+                    DB::table('product_category_media')->insert([
+                        'id' => (string) Str::uuid(),
                         'category_id' => $id,
-                        'store_id' => $storeId === 'global' ? null : $storeId,
-                        'meta_title' => $seoData['meta_title'] ?? null,
-                        'meta_description' => $seoData['meta_description'] ?? null,
-                        'meta_keywords' => $seoData['meta_keywords'] ?? null,
+                        'file_path' => $filePath,
+                        'file_name' => $file->hashName(),
+                        'original_name' => $file->getClientOriginalName(),
+                        'file_type' => $file->extension(),
+                        'file_size' => $file->getSize(),
+                        'mime_type' => $file->getMimeType(),
+                        'media_type' => 'image',
+                        'sort_order' => $sortOrder++,
                         'created_at' => now(),
-                        'updated_at' => now(),
+                        'updated_at' => now()
                     ]);
                 }
             }
 
-            // Update path for all children if parent changed
-            if ($request->parent_id !== $category->parent_id) {
-                $this->updateChildrenPaths($id);
-            }
-
             DB::commit();
-
-            return redirect()->route('admin.product-categories.index')
-                ->with('success', 'Category updated successfully!');
-
+            return redirect()->route('admin.product-categories.index')->with('success','Category updated successfully');
         } catch (\Exception $e) {
-            DB::rollback();
-            return back()->withInput()->with('error', 'Failed to update category: ' . $e->getMessage());
+            DB::rollBack();
+            return back()->withInput()->with('error','Failed to update category: '.$e->getMessage());
         }
     }
+
+
 
     private function updateChildrenPaths($categoryId)
     {

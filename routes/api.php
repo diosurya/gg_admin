@@ -25,7 +25,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/tags', [TagController::class, 'index']);
     Route::get('/sliders', [SliderController::class, 'index']);
 
-
     Route::get('/stores/{storeId}/products', [ProductController::class, 'index']);
     Route::get('/stores/{storeId}/products/{slug}', [ProductController::class, 'show']);
+    Route::get('/products/search', [ProductController::class, 'search']);
 });

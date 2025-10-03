@@ -124,13 +124,13 @@
                     <ul class="nav nav-tabs">
                         <li><a class="nav-link active" data-toggle="tab" href="#tab-stores"> Store Assignment</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-basic"> Basic Info</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-details"> Details</a></li>
+                        <!-- <li><a class="nav-link" data-toggle="tab" href="#tab-details"> Details</a></li> -->
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-seo"> SEO & Meta</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-images"> Image Cover</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-pricing"> Pricing & Discounts</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-variants"> Variants</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-categories"> Categories</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-seo"> SEO & Meta</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-shipping"> Shipping & Tax</a></li>
+                        <!-- <li><a class="nav-link" data-toggle="tab" href="#tab-pricing"> Pricing & Discounts</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-shipping"> Shipping & Tax</a></li> -->
                     </ul>
                     
                     <div class="tab-content">
@@ -242,22 +242,7 @@
                                             </select>
                                         </div>
                                     </div>
-                                </fieldset>
-                            </div>
-                        </div>
 
-                        {{-- Details Tab --}}
-                        <div id="tab-details" class="tab-pane">
-                            <div class="panel-body">
-                                <fieldset>
-                                    <div class="form-group row">
-                                        <label class="col-sm-2 col-form-label">Type</label>
-                                        <div class="col-sm-10">
-                                            <input type="text" name="type" class="form-control" 
-                                                   placeholder="Product type (e.g., Electronics, Clothing)" value="{{ old('type', $product->type) }}">
-                                        </div>
-                                    </div>
-                                    
                                     <div class="form-group row">
                                         <label class="col-sm-2 col-form-label">Barcode</label>
                                         <div class="col-sm-10">
@@ -273,17 +258,8 @@
                                                    placeholder="Product model" value="{{ old('model', $product->model) }}">
                                         </div>
                                     </div>
-                                    
-                                    <div class="form-group row">
-                                        <label class="col-sm-2 col-form-label">Minimum Quantity</label>
-                                        <div class="col-sm-10">
-                                            <input type="number" name="minimum_quantity" class="form-control" 
-                                                   placeholder="1" value="{{ old('minimum_quantity', $product->minimum_quantity ?: 1) }}" min="1">
-                                            <div class="form-help">Minimum quantity required for purchase</div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="form-group row">
+
+                                     <div class="form-group row">
                                         <label class="col-sm-2 col-form-label">Track Stock</label>
                                         <div class="col-sm-10">
                                             <input type="checkbox" name="track_stock" class="js-switch" value="1" 
@@ -291,12 +267,9 @@
                                             <div class="form-help">Enable stock tracking for this product</div>
                                         </div>
                                     </div>
-                                    
-                                    
                                 </fieldset>
                             </div>
                         </div>
-
                         
                         {{-- Images Tab --}}
                         <div id="tab-images" class="tab-pane">
@@ -317,13 +290,13 @@
                                     <div class="form-group">
                                         <label>Existing Images</label>
                                         <div class="existing-images-container mb-3">
-                                            @foreach($coverProduct as $media)
-                                                <div class="existing-image" id="existing-main-media-{{ $media->id }}">
-                                                    <img src="{{ $media->image_path }}" class="img-thumbnail" style="max-width:200px;">
-                                                    <button type="button" class="remove-existing" onclick="removeExistingMainMedia('{{ $media->id }}')">&times;</button>
-                                                    <input type="hidden" name="keep_main_media[]" value="{{ $media->id }}">
+                                            <div class="existing-images-container mb-3">
+                                                <div class="existing-image" id="existing-main-media-{{ $product->id }}">
+                                                    <img src="{{ $product->cover_image }}" class="img-thumbnail" style="max-width:200px;">
+                                                    <button type="button" class="remove-existing" onclick="removeExistingMainMedia('{{ $product->id }}')">&times;</button>
+                                                    <input type="hidden" name="keep_main_media[]" value="{{ $product->id }}">
                                                 </div>
-                                            @endforeach
+                                        </div>
                                         </div>
                                     </div>
                                     
@@ -519,7 +492,7 @@
                                                     <span class="input-group-text">Rp</span>
                                                 </span>
                                                 <input type="number" name="price" class="form-control" 
-                                                       placeholder="0.00" step="0.01" value="{{ old('price', $product->price) }}" required>
+                                                       placeholder="0.00" step="0.01" value="{{ old('price', $product->price) }}">
                                             </div>
                                         </div>
                                         
@@ -1183,6 +1156,9 @@ $(document).ready(function(){
     // AJAX Form submission
     $('#productForm').on('submit', function(e) {
         e.preventDefault();
+
+        // Temporarily disable inputs of unchecked stores
+        $('.store-checkbox:not(:checked)').closest('.store-section').find('input').prop('disabled', true);
         
         // Show loading overlay
         $('#loadingOverlay').show();
@@ -1195,13 +1171,10 @@ $(document).ready(function(){
         $('#description').val($('.summernote').summernote('code'));
         
         // Get form data
-        const formData = new FormData();
-        
-        // Collect all form data
-        const formFields = $(this).serializeArray();
-        $.each(formFields, function(i, field) {
-            formData.append(field.name, field.value);
-        });
+        const formData = new FormData(this);
+
+        // Re-enable the disabled inputs
+        $('.store-checkbox:not(:checked)').closest('.store-section').find('input').prop('disabled', false);
         
         // Add removed media and variants to form data
         removedMainMedia.forEach((mediaId, index) => {
@@ -1218,9 +1191,14 @@ $(document).ready(function(){
         
         // Get selected categories from jstree
         const selectedCategories = $('#categoryTree').jstree('get_selected');
-        selectedCategories.forEach((categoryId, index) => {
-            formData.append(`categories[${index}]`, categoryId);
-        });
+
+        if (selectedCategories.length > 0) {
+            selectedCategories.forEach(categoryId => {
+                formData.append('categories[]', categoryId);
+            });
+        } else {
+            formData.append('categories', JSON.stringify([]));
+        }
         
         // Set status based on action button
         const action = $(document.activeElement).val();

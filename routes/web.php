@@ -52,8 +52,30 @@ Route::prefix('admin')->name('admin.')->group(function () {
     
     // Authenticated routes
     Route::middleware('auth')->group(function () {
+
+
+        // Product Categories Management
+        Route::prefix('product-categories')->name('product-categories.')->group(function () {
+            Route::get('/', [ProductCategoriesController::class, 'index'])->name('index');
+            Route::get('create', [ProductCategoriesController::class, 'create'])->name('create');
+            Route::post('/', [ProductCategoriesController::class, 'store'])->name('store');
+            Route::get('{id}', [ProductCategoriesController::class, 'show'])->name('show');
+            Route::get('{id}/edit', [ProductCategoriesController::class, 'edit'])->name('edit');
+            Route::put('{id}', [ProductCategoriesController::class, 'update'])->name('update');
+            Route::delete('{id}', [ProductCategoriesController::class, 'destroy'])->name('destroy');
+            
+            // AJAX routes
+            Route::get('tree/data', [ProductCategoriesController::class, 'getCategoryTree'])->name('tree');
+            Route::post('reorder', [ProductCategoriesController::class, 'reorder'])->name('reorder');
+            Route::post('{id}/upload-media', [ProductCategoriesController::class, 'uploadMedia'])->name('upload-media');
+            Route::delete('{categoryId}/media/{mediaId}', [ProductCategoriesController::class, 'deleteMedia'])->name('delete-media');
+
+            Route::post('/reorder', [ProductCategoriesController::class, 'reorder'])->name('reorder');
+        });
+
+
         // Dashboard
-         Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+        Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
         Route::get('/', [AuthController::class, 'dashboard'])->name('home');
         
         // Logout
@@ -102,24 +124,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('list/all', [BrandsController::class, 'getBrandsList'])->name('list');
         });
 
-        // Product Categories Management
-        Route::prefix('product-categories')->name('product-categories.')->group(function () {
-            Route::get('/', [ProductCategoriesController::class, 'index'])->name('index');
-            Route::get('create', [ProductCategoriesController::class, 'create'])->name('create');
-            Route::post('/', [ProductCategoriesController::class, 'store'])->name('store');
-            Route::get('{id}', [ProductCategoriesController::class, 'show'])->name('show');
-            Route::get('{id}/edit', [ProductCategoriesController::class, 'edit'])->name('edit');
-            Route::put('{id}', [ProductCategoriesController::class, 'update'])->name('update');
-            Route::delete('{id}', [ProductCategoriesController::class, 'destroy'])->name('destroy');
-            
-            // AJAX routes
-            Route::get('tree/data', [ProductCategoriesController::class, 'getCategoryTree'])->name('tree');
-            Route::post('reorder', [ProductCategoriesController::class, 'reorder'])->name('reorder');
-            Route::post('{id}/upload-media', [ProductCategoriesController::class, 'uploadMedia'])->name('upload-media');
-            Route::delete('{categoryId}/media/{mediaId}', [ProductCategoriesController::class, 'deleteMedia'])->name('delete-media');
-
-            Route::post('/reorder', [ProductCategoriesController::class, 'reorder'])->name('reorder');
-        });
+        
 
         // Products Management
         Route::prefix('products')->name('products.')->group(function () {

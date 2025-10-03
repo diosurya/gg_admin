@@ -101,13 +101,13 @@
                     <ul class="nav nav-tabs">
                         <li><a class="nav-link active" data-toggle="tab" href="#tab-stores"> Store Assignment</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-basic"> Basic Info</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-details"> Details</a></li>
+                        <li><a class="nav-link" data-toggle="tab" href="#tab-seo"> SEO & Meta</a></li>
+                        <!-- <li><a class="nav-link" data-toggle="tab" href="#tab-details"> Details</a></li> -->
                         <li><a class="nav-link" data-toggle="tab" href="#tab-images"> Image Cover</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-pricing"> Pricing & Discounts</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-variants"> Variants</a></li>
                         <li><a class="nav-link" data-toggle="tab" href="#tab-categories"> Categories</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-seo"> SEO & Meta</a></li>
-                        <li><a class="nav-link" data-toggle="tab" href="#tab-shipping"> Shipping & Tax</a></li>
+                        <!-- <li><a class="nav-link" data-toggle="tab" href="#tab-pricing"> Pricing & Discounts</a></li> -->
+                        <!-- <li><a class="nav-link" data-toggle="tab" href="#tab-shipping"> Shipping & Tax</a></li> -->
                     </ul>
                     
                     <div class="tab-content">
@@ -210,22 +210,7 @@
                                             </select>
                                         </div>
                                     </div>
-                                </fieldset>
-                            </div>
-                        </div>
 
-                        {{-- Details Tab --}}
-                        <div id="tab-details" class="tab-pane">
-                            <div class="panel-body">
-                                <fieldset>
-                                    <div class="form-group row">
-                                        <label class="col-sm-2 col-form-label">Type</label>
-                                        <div class="col-sm-10">
-                                            <input type="text" name="type" class="form-control" 
-                                                   placeholder="Product type (e.g., Electronics, Clothing)" value="{{ old('type') }}">
-                                        </div>
-                                    </div>
-                                    
                                     <div class="form-group row">
                                         <label class="col-sm-2 col-form-label">Barcode</label>
                                         <div class="col-sm-10">
@@ -250,29 +235,12 @@
                                             <div class="form-help">Minimum quantity required for purchase</div>
                                         </div>
                                     </div>
-                                    
-                                    <div class="form-group row">
-                                        <label class="col-sm-2 col-form-label">Sort Order</label>
-                                        <div class="col-sm-10">
-                                            <input type="number" name="sort_order" class="form-control" 
-                                                   placeholder="0" value="{{ old('sort_order', 0) }}">
-                                            <div class="form-help">Used for ordering products in listings</div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="form-group row">
-                                        <label class="col-sm-2 col-form-label">Track Stock</label>
-                                        <div class="col-sm-10">
-                                            <input type="checkbox" name="track_stock" class="js-switch" value="1" 
-                                                   {{ old('track_stock') ? 'checked' : '' }}>
-                                            <div class="form-help">Enable stock tracking for this product</div>
-                                        </div>
-                                    </div>
-                                    
-                                    
                                 </fieldset>
                             </div>
                         </div>
+
+
+          
 
                         {{-- Images Tab --}}
                         <div id="tab-images" class="tab-pane">

@@ -221,7 +221,7 @@
                     <div class="row">
                         <div class="col-md-3">
                           @php
-                                $imageUrl = $coverProduct ? url($coverProduct->image_path) : null;
+                                $imageUrl = $product->cover_image ? url($product->cover_image) : null;
                             @endphp
 
                             @if($imageUrl)
