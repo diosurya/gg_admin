@@ -562,6 +562,26 @@ class ProductsController extends Controller
                         'updated_at' => now(),
                     ]);
 
+                    if (!empty($variantData['store_id'])) {
+                        DB::table('variant_stores')->insert([
+                            'id' => (string) Str::uuid(),
+                            'variant_id' => $variantId,
+                            'store_id' => $variantData['store_id'],
+                            'price' => $variantData['price'] ?? $request->price,
+                            'sale_price' => $variantData['sale_price'] ?? $request->sale_price,
+                            'cost_price' => null,
+                            'stock_quantity' => $variantData['stock_quantity'] ?? 0,
+                            'min_stock_level' => 0,
+                            'max_stock_level' => null,
+                            'manage_stock' => true,
+                            'stock_status' => ($variantData['stock_quantity'] ?? 0) > 0 ? 'in_stock' : 'out_of_stock',
+                            'is_active' => true,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+
+
                     Log::info('Variant created with cover:', [
                         'variant_id' => $variantId,
                         'cover_image' => $coverImagePath
@@ -1322,7 +1342,6 @@ class ProductsController extends Controller
                         }
                     }
 
-                    // Insert new variant
                     DB::table('product_variants')->insert([
                         'id' => $variantId,
                         'product_id' => $product->id,
@@ -1339,6 +1358,25 @@ class ProductsController extends Controller
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
+
+                    if (!empty($variantData['store_id'])) {
+                        DB::table('variant_stores')->insert([
+                            'id' => (string) Str::uuid(),
+                            'variant_id' => $variantId,
+                            'store_id' => $variantData['store_id'],
+                            'price' => $variantData['price'] ?? $request->price,
+                            'sale_price' => $variantData['sale_price'] ?? $request->sale_price,
+                            'cost_price' => null,
+                            'stock_quantity' => $variantData['stock_quantity'] ?? 0,
+                            'min_stock_level' => 0,
+                            'max_stock_level' => null,
+                            'manage_stock' => true,
+                            'stock_status' => ($variantData['stock_quantity'] ?? 0) > 0 ? 'in_stock' : 'out_of_stock',
+                            'is_active' => true,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
 
                     Log::info('New variant created:', [
                         'variant_id' => $variantId,
